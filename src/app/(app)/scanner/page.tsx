@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ScanBarcode, AlertTriangle, BookCheck, Database, Loader2, CheckCircle2, X, BookOpen, User, Hash, Library } from "lucide-react";
-import { Html5QrcodeScanner } from "html5-qrcode";
+import { Html5QrcodeScanner, Html5QrcodeSupportedFormats } from "html5-qrcode";
 import { checkIfDuplicate, addBook, BookInsert } from "@/lib/bookService";
 
 type ScanResult = "duplicate" | "new" | "loading" | "saved" | null;
@@ -39,6 +39,16 @@ export default function ScannerPage() {
         // Removed aspectRatio to let the camera use its natural, undistorted resolution
         showTorchButtonIfSupported: true,
         useBarCodeDetectorIfSupported: true, // Uses native barcode detector API if available on Android/iOS
+        formatsToSupport: [
+          Html5QrcodeSupportedFormats.EAN_13,
+          Html5QrcodeSupportedFormats.EAN_8,
+          Html5QrcodeSupportedFormats.UPC_A,
+          Html5QrcodeSupportedFormats.UPC_E,
+        ],
+        videoConstraints: {
+          facingMode: "environment",
+          focusMode: "continuous"
+        } as any,
       };
 
       scannerRef.current = new Html5QrcodeScanner("reader", config, false);
