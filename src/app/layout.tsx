@@ -33,3 +33,4 @@ export default function RootLayout({
     </html>
   );
 }
+console.log('Force redeploy for new Supabase Project ID');
