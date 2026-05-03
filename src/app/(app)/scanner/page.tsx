@@ -32,14 +32,24 @@ export default function ScannerPage() {
     if (!isScanning || isManualModalOpen) return;
     
     const timer = setTimeout(() => {
-      scannerRef.current = new Html5QrcodeScanner(
-        "reader",
-        { fps: 10, qrbox: { width: 250, height: 150 } },
-        false
-      );
+      // Configuration for better mobile scanning
+      const config = {
+        fps: 20, // Higher FPS for smoother scanning
+        qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
+          // Dynamic box size for mobile
+          const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
+          const boxSize = Math.floor(minEdge * 0.7);
+          return { width: boxSize, height: boxSize * 0.6 };
+        },
+        aspectRatio: 1.0,
+        showTorchButtonIfSupported: true,
+      };
+
+      scannerRef.current = new Html5QrcodeScanner("reader", config, false);
 
       scannerRef.current.render(
         async (decodedText) => {
+          console.log("Barcode detected:", decodedText);
           scannerRef.current?.pause(true);
           setIsScanning(false);
           setScanResult("loading");
@@ -104,6 +114,7 @@ export default function ScannerPage() {
 
   const handleManualSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    console.log("Submitting manual entry:", manualForm);
     setIsSaving(true);
     setError(null);
     try {
@@ -117,9 +128,7 @@ export default function ScannerPage() {
       };
       await addBook(newBook);
       setIsManualModalOpen(false);
-      // Reset form
       setManualForm({ title: "", author: "", isbn: "", shelf: "Main Shelf" });
-      // Show success on main screen
       setBookData({ title: newBook.title, author: newBook.author, isbn: newBook.isbn || "" });
       setScanResult("saved");
       setIsScanning(false);
@@ -142,7 +151,7 @@ export default function ScannerPage() {
   };
 
   return (
-    <div className="h-full flex flex-col items-center justify-center relative min-h-[600px]">
+    <div className="h-full flex flex-col items-center justify-center relative min-h-[600px] pb-20">
       <div className="text-center mb-8 z-10">
         <h1 className="text-3xl font-outfit font-bold text-white mb-2">Smart Scanner</h1>
         <p className="text-white/50 max-w-md mx-auto">Point your camera at a barcode or use manual entry to add books to your collection.</p>
@@ -188,7 +197,7 @@ export default function ScannerPage() {
               initial={{ opacity: 0, y: 100 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 100 }}
-              className={`absolute bottom-0 left-0 w-full p-6 backdrop-blur-xl border-t flex flex-col items-center text-center z-20 ${
+              className={`absolute bottom-0 left-0 w-full p-6 backdrop-blur-xl border-t flex flex-col items-center text-center z-30 ${
                 scanResult === 'duplicate' ? 'bg-amber-500/20 border-amber-500/30' : 
                 scanResult === 'saved' ? 'bg-blue-500/20 border-blue-500/30' :
                 'bg-emerald-500/20 border-emerald-500/30'
@@ -243,15 +252,19 @@ export default function ScannerPage() {
         </AnimatePresence>
       </div>
       
-      <div className="flex gap-4 mt-8 z-10">
+      <div className="flex gap-4 mt-8 z-40 relative">
         <button 
-          onClick={() => setIsManualModalOpen(true)}
-          className="flex items-center gap-2 px-6 py-3 bg-white/5 border border-white/10 hover:bg-white/10 rounded-full text-white font-medium transition-colors backdrop-blur-md"
+          onClick={(e) => {
+            console.log("Manual Entry clicked");
+            e.stopPropagation();
+            setIsManualModalOpen(true);
+          }}
+          className="flex items-center gap-2 px-6 py-4 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-full transition-all shadow-lg shadow-amber-500/20 scale-105"
         >
-          <Database className="w-4 h-4" />
+          <Database className="w-5 h-5" />
           Manual Entry
         </button>
-        <button className="flex items-center gap-2 px-6 py-3 bg-white/5 border border-white/10 hover:bg-white/10 rounded-full text-white font-medium transition-colors backdrop-blur-md">
+        <button className="flex items-center gap-2 px-6 py-4 bg-white/5 border border-white/10 hover:bg-white/10 rounded-full text-white font-medium transition-colors backdrop-blur-md">
           <ScanBarcode className="w-4 h-4" />
           OCR Mode
         </button>
