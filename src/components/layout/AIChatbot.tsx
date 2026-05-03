@@ -8,7 +8,7 @@ import { useChat } from "@ai-sdk/react";
 export default function AIChatbot() {
   const [isOpen, setIsOpen] = useState(false);
   const [input, setInput] = useState("");
-  const { messages, sendMessage, status } = useChat();
+  const { messages, sendMessage, status, error } = useChat();
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const isLoading = status === 'submitted' || status === 'streaming';
@@ -91,6 +91,12 @@ export default function AIChatbot() {
               {isLoading && (
                 <div className="bg-white/5 rounded-2xl rounded-tl-sm p-3 max-w-[85%] border border-white/5 text-sm text-white/50 self-start animate-pulse">
                   BookMind AI is typing...
+                </div>
+              )}
+              
+              {error && (
+                <div className="bg-red-500/20 border border-red-500/50 rounded-2xl rounded-tl-sm p-3 max-w-[85%] text-sm text-red-200 self-start">
+                  {error.message || "An error occurred communicating with the AI. Please check your API keys."}
                 </div>
               )}
               
