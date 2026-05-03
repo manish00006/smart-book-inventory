@@ -34,15 +34,11 @@ export default function ScannerPage() {
     const timer = setTimeout(() => {
       // Configuration for better mobile scanning
       const config = {
-        fps: 20, // Higher FPS for smoother scanning
-        qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
-          // Dynamic box size for mobile
-          const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
-          const boxSize = Math.floor(minEdge * 0.7);
-          return { width: boxSize, height: boxSize * 0.6 };
-        },
-        aspectRatio: 1.0,
+        fps: 10, // Lower FPS gives the camera more time to auto-focus
+        qrbox: { width: 300, height: 150 }, // Fixed wide box is much better for ISBN barcodes
+        // Removed aspectRatio to let the camera use its natural, undistorted resolution
         showTorchButtonIfSupported: true,
+        useBarCodeDetectorIfSupported: true, // Uses native barcode detector API if available on Android/iOS
       };
 
       scannerRef.current = new Html5QrcodeScanner("reader", config, false);
