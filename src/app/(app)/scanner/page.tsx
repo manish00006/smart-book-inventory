@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ScanBarcode, AlertTriangle, BookCheck, Database, Loader2, CheckCircle2 } from "lucide-react";
+import { ScanBarcode, AlertTriangle, BookCheck, Database, Loader2, CheckCircle2, X, BookOpen, User, Hash, Library } from "lucide-react";
 import { Html5QrcodeScanner } from "html5-qrcode";
 import { checkIfDuplicate, addBook, BookInsert } from "@/lib/bookService";
 
@@ -15,40 +15,43 @@ export default function ScannerPage() {
   const [bookData, setBookData] = useState<BookData>(null);
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isManualModalOpen, setIsManualModalOpen] = useState(false);
+  
+  // Manual Entry Form State
+  const [manualForm, setManualForm] = useState({
+    title: "",
+    author: "",
+    isbn: "",
+    shelf: "Main Shelf"
+  });
   
   const scannerRef = useRef<Html5QrcodeScanner | null>(null);
 
   // Initialize Scanner
   useEffect(() => {
-    if (!isScanning) return;
+    if (!isScanning || isManualModalOpen) return;
     
-    // Slight delay to ensure DOM element exists
     const timer = setTimeout(() => {
       scannerRef.current = new Html5QrcodeScanner(
         "reader",
         { fps: 10, qrbox: { width: 250, height: 150 } },
-        /* verbose= */ false
+        false
       );
 
       scannerRef.current.render(
         async (decodedText) => {
-          // Pause scanner
           scannerRef.current?.pause(true);
           setIsScanning(false);
           setScanResult("loading");
           
           try {
-            // 1. Check if we already have this ISBN in the DB
             const isDup = await checkIfDuplicate(decodedText);
-
-            // 2. Fetch book data from OpenLibrary API
             const response = await fetch(`https://openlibrary.org/api/books?bibkeys=ISBN:${decodedText}&format=json&jscmd=data`);
             const data = await response.json();
             const bookKey = `ISBN:${decodedText}`;
             
             if (data[bookKey]) {
               const bookInfo = data[bookKey];
-              
               setBookData({
                 title: bookInfo.title,
                 author: bookInfo.authors?.[0]?.name || "Unknown Author",
@@ -56,7 +59,6 @@ export default function ScannerPage() {
                 coverUrl: bookInfo.cover?.large || bookInfo.cover?.medium || undefined,
                 shelf: "Recently Scanned"
               });
-              
               setScanResult(isDup ? "duplicate" : "new");
             } else {
               throw new Error("Book not found in OpenLibrary database.");
@@ -66,9 +68,7 @@ export default function ScannerPage() {
             setScanResult(null);
           }
         },
-        (err) => {
-          // Ignore scanning noise errors
-        }
+        () => {}
       );
     }, 100);
 
@@ -78,7 +78,7 @@ export default function ScannerPage() {
         scannerRef.current.clear().catch(console.error);
       }
     };
-  }, [isScanning]);
+  }, [isScanning, isManualModalOpen]);
 
   const handleAddToLibrary = async () => {
     if (!bookData) return;
@@ -93,11 +93,38 @@ export default function ScannerPage() {
         shelf: bookData.shelf || "Uncategorized",
         status: "Unread"
       };
-      
       await addBook(newBook);
       setScanResult("saved");
     } catch (err: any) {
       setError("Failed to save book to database. Please try again.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleManualSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSaving(true);
+    setError(null);
+    try {
+      const newBook: BookInsert = {
+        title: manualForm.title,
+        author: manualForm.author,
+        isbn: manualForm.isbn || null,
+        cover_url: null,
+        shelf: manualForm.shelf,
+        status: "Unread"
+      };
+      await addBook(newBook);
+      setIsManualModalOpen(false);
+      // Reset form
+      setManualForm({ title: "", author: "", isbn: "", shelf: "Main Shelf" });
+      // Show success on main screen
+      setBookData({ title: newBook.title, author: newBook.author, isbn: newBook.isbn || "" });
+      setScanResult("saved");
+      setIsScanning(false);
+    } catch (err: any) {
+      setError("Failed to add book manually.");
     } finally {
       setIsSaving(false);
     }
@@ -118,25 +145,19 @@ export default function ScannerPage() {
     <div className="h-full flex flex-col items-center justify-center relative min-h-[600px]">
       <div className="text-center mb-8 z-10">
         <h1 className="text-3xl font-outfit font-bold text-white mb-2">Smart Scanner</h1>
-        <p className="text-white/50 max-w-md mx-auto">Point your camera at a barcode, ISBN, or book cover to instantly check your inventory.</p>
+        <p className="text-white/50 max-w-md mx-auto">Point your camera at a barcode or use manual entry to add books to your collection.</p>
       </div>
 
       <div className="relative w-full max-w-md aspect-[3/4] bg-black/40 rounded-3xl border border-white/10 overflow-hidden shadow-2xl glass-panel z-10 flex flex-col">
-        
-        {/* Camera container for html5-qrcode */}
         <div id="reader" className={`w-full h-full object-cover bg-black ${!isScanning ? "opacity-0 absolute" : "opacity-100"}`} />
 
-        {/* Scanner overlay UI - only visible when searching */}
         {isScanning && (
           <div className="absolute inset-0 pointer-events-none p-8 flex items-center justify-center">
              <div className="relative w-[250px] h-[150px]">
-                {/* Viewfinder corners */}
                 <div className="absolute top-0 left-0 w-8 h-8 border-t-2 border-l-2 border-amber-400 rounded-tl-xl" />
                 <div className="absolute top-0 right-0 w-8 h-8 border-t-2 border-r-2 border-amber-400 rounded-tr-xl" />
                 <div className="absolute bottom-0 left-0 w-8 h-8 border-b-2 border-l-2 border-amber-400 rounded-bl-xl" />
                 <div className="absolute bottom-0 right-0 w-8 h-8 border-b-2 border-r-2 border-amber-400 rounded-br-xl" />
-                
-                {/* Animated Scanning Beam */}
                 <motion.div 
                   animate={{ y: [0, 150, 0] }}
                   transition={{ duration: 2.5, repeat: Infinity, ease: "linear" }}
@@ -161,7 +182,6 @@ export default function ScannerPage() {
           </div>
         )}
 
-        {/* Scan Results Modal Overlay */}
         <AnimatePresence>
           {(scanResult === 'duplicate' || scanResult === 'new' || scanResult === 'saved') && bookData && (
             <motion.div 
@@ -187,7 +207,7 @@ export default function ScannerPage() {
                   <div className="w-12 h-12 rounded-full bg-blue-500/20 flex items-center justify-center mb-3">
                     <CheckCircle2 className="w-6 h-6 text-blue-400" />
                   </div>
-                  <h3 className="text-xl font-outfit font-bold text-white mb-1">Saved Successfully!</h3>
+                  <h3 className="text-xl font-outfit font-bold text-white mb-1">Success!</h3>
                   <p className="text-sm text-white/70 mb-4"><strong className="text-white">{bookData.title}</strong> has been added to your library.</p>
                 </>
               ) : (
@@ -221,12 +241,13 @@ export default function ScannerPage() {
             </motion.div>
           )}
         </AnimatePresence>
-
       </div>
       
-      {/* Footer controls */}
       <div className="flex gap-4 mt-8 z-10">
-        <button className="flex items-center gap-2 px-6 py-3 bg-white/5 border border-white/10 hover:bg-white/10 rounded-full text-white font-medium transition-colors backdrop-blur-md">
+        <button 
+          onClick={() => setIsManualModalOpen(true)}
+          className="flex items-center gap-2 px-6 py-3 bg-white/5 border border-white/10 hover:bg-white/10 rounded-full text-white font-medium transition-colors backdrop-blur-md"
+        >
           <Database className="w-4 h-4" />
           Manual Entry
         </button>
@@ -235,6 +256,115 @@ export default function ScannerPage() {
           OCR Mode
         </button>
       </div>
+
+      {/* Manual Entry Modal */}
+      <AnimatePresence>
+        {isManualModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsManualModalOpen(false)}
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            />
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              className="relative w-full max-w-md bg-[#1a1c2e] border border-white/10 rounded-3xl p-8 shadow-2xl z-10 overflow-hidden"
+            >
+              <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-amber-500 to-amber-300" />
+              
+              <div className="flex items-center justify-between mb-8">
+                <div>
+                  <h2 className="text-2xl font-outfit font-bold text-white">Manual Entry</h2>
+                  <p className="text-white/50 text-sm">Add a book details manually</p>
+                </div>
+                <button 
+                  onClick={() => setIsManualModalOpen(false)}
+                  className="p-2 hover:bg-white/5 rounded-full transition-colors"
+                >
+                  <X className="w-6 h-6 text-white/50" />
+                </button>
+              </div>
+
+              <form onSubmit={handleManualSubmit} className="space-y-5">
+                <div className="space-y-2">
+                  <label className="text-xs font-medium text-white/40 uppercase tracking-wider ml-1">Book Title</label>
+                  <div className="relative">
+                    <BookOpen className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
+                    <input 
+                      required
+                      type="text"
+                      placeholder="e.g. The Great Gatsby"
+                      value={manualForm.title}
+                      onChange={e => setManualForm({...manualForm, title: e.target.value})}
+                      className="w-full bg-white/5 border border-white/10 rounded-xl py-3 pl-12 pr-4 text-white placeholder:text-white/20 focus:outline-none focus:border-amber-500/50 transition-colors"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-xs font-medium text-white/40 uppercase tracking-wider ml-1">Author Name</label>
+                  <div className="relative">
+                    <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
+                    <input 
+                      required
+                      type="text"
+                      placeholder="e.g. F. Scott Fitzgerald"
+                      value={manualForm.author}
+                      onChange={e => setManualForm({...manualForm, author: e.target.value})}
+                      className="w-full bg-white/5 border border-white/10 rounded-xl py-3 pl-12 pr-4 text-white placeholder:text-white/20 focus:outline-none focus:border-amber-500/50 transition-colors"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-xs font-medium text-white/40 uppercase tracking-wider ml-1">ISBN (Optional)</label>
+                    <div className="relative">
+                      <Hash className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
+                      <input 
+                        type="text"
+                        placeholder="13 digits"
+                        value={manualForm.isbn}
+                        onChange={e => setManualForm({...manualForm, isbn: e.target.value})}
+                        className="w-full bg-white/5 border border-white/10 rounded-xl py-3 pl-12 pr-4 text-white placeholder:text-white/20 focus:outline-none focus:border-amber-500/50 transition-colors"
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-medium text-white/40 uppercase tracking-wider ml-1">Shelf</label>
+                    <div className="relative">
+                      <Library className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
+                      <select 
+                        value={manualForm.shelf}
+                        onChange={e => setManualForm({...manualForm, shelf: e.target.value})}
+                        className="w-full bg-[#1a1c2e] border border-white/10 rounded-xl py-3 pl-12 pr-4 text-white focus:outline-none focus:border-amber-500/50 transition-colors appearance-none"
+                      >
+                        <option value="Main Shelf">Main Shelf</option>
+                        <option value="Favorites">Favorites</option>
+                        <option value="To Read">To Read</option>
+                        <option value="Research">Research</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                <button 
+                  type="submit"
+                  disabled={isSaving}
+                  className="w-full py-4 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white rounded-xl font-bold text-lg transition-all shadow-lg shadow-amber-500/20 flex items-center justify-center gap-3 mt-4"
+                >
+                  {isSaving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Database className="w-5 h-5" />}
+                  {isSaving ? "Adding..." : "Add to Collection"}
+                </button>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
