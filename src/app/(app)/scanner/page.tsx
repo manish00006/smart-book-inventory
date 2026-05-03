@@ -112,7 +112,8 @@ export default function ScannerPage() {
       await addBook(newBook);
       setScanResult("saved");
     } catch (err: any) {
-      setError("Failed to save book to database. Please try again.");
+      console.error("Scanner Save Error:", err);
+      setError(`Failed: ${err.message || JSON.stringify(err)}`);
     } finally {
       setIsSaving(false);
     }
