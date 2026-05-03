@@ -184,7 +184,7 @@ export default function ScannerPage() {
         )}
 
         {error && (
-          <div className="absolute inset-0 bg-black/80 flex flex-col items-center justify-center p-6 text-center z-20">
+          <div className="absolute inset-0 bg-black/80 flex flex-col items-center justify-center p-6 text-center z-50">
             <AlertTriangle className="w-10 h-10 text-red-500 mb-4" />
             <p className="text-white mb-6">{error}</p>
             <button onClick={resetScanner} className="px-6 py-2 bg-white/10 hover:bg-white/20 rounded-xl transition-colors">Try Again</button>
