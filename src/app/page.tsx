@@ -1,10 +1,31 @@
 "use client";
 
+import { useMemo } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { ScanBarcode, Sparkles, BookOpen, Layers, Library } from "lucide-react";
 
+const bookThoughts = [
+  { quote: "A reader lives a thousand lives before he dies.", author: "George R.R. Martin" },
+  { quote: "Books are a uniquely portable magic.", author: "Stephen King" },
+  { quote: "One glance at a book and you hear the voice of another person.", author: "Carl Sagan" },
+  { quote: "A room without books is like a body without a soul.", author: "Marcus Tullius Cicero" },
+  { quote: "The world belongs to those who read.", author: "Rick Holland" },
+  { quote: "Reading is dreaming with open eyes.", author: "Anissa Trisdianty" },
+  { quote: "Books are mirrors: you only see in them what you already have inside you.", author: "Carlos Ruiz Zafón" },
+  { quote: "There is no friend as loyal as a book.", author: "Ernest Hemingway" },
+  { quote: "Today a reader, tomorrow a leader.", author: "Margaret Fuller" },
+  { quote: "A book is a dream that you hold in your hand.", author: "Neil Gaiman" },
+  { quote: "We read to know we are not alone.", author: "C.S. Lewis" },
+  { quote: "Think before you speak. Read before you think.", author: "Fran Lebowitz" },
+  { quote: "That's the thing about books. They let you travel without moving your feet.", author: "Jhumpa Lahiri" },
+  { quote: "Reading gives us someplace to go when we have to stay where we are.", author: "Mason Cooley" },
+  { quote: "I have always imagined that Paradise will be a kind of library.", author: "Jorge Luis Borges" },
+];
+
 export default function LandingPage() {
+  const thought = useMemo(() => bookThoughts[Math.floor(Math.random() * bookThoughts.length)], []);
+
   return (
     <div className="relative min-h-screen bg-[#0a0e17] overflow-hidden flex flex-col items-center justify-center">
       {/* Background Ambience */}
@@ -44,18 +65,27 @@ export default function LandingPage() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.1 }}
-          className="font-outfit text-5xl md:text-7xl font-bold tracking-tight text-transparent bg-clip-text bg-gradient-to-br from-white to-white/60 mb-6"
+          className="font-outfit text-4xl md:text-6xl lg:text-7xl font-bold tracking-tight text-transparent bg-clip-text bg-gradient-to-br from-white to-white/60 mb-4 leading-tight"
         >
-          Never Buy the Same <br className="hidden md:block" /> Book Twice Again.
+          &ldquo;{thought.quote}&rdquo;
         </motion.h1>
 
         <motion.p 
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.2 }}
-          className="text-lg md:text-xl text-white/60 max-w-2xl mb-12"
+          className="text-lg md:text-xl text-amber-400/80 font-medium mb-3 italic"
         >
-          AI-powered personal library inventory system for collectors and readers. Scan, organize, and discover like never before.
+          — {thought.author}
+        </motion.p>
+
+        <motion.p 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 0.25 }}
+          className="text-base md:text-lg text-white/40 max-w-2xl mb-12"
+        >
+          Your AI-powered personal library. Scan, organize, and discover.
         </motion.p>
 
         <motion.div 
