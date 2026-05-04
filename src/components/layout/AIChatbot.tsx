@@ -20,7 +20,7 @@ export default function AIChatbot() {
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!input.trim()) return;
-    sendMessage({ parts: [{ type: 'text', text: input }], role: 'user' });
+    sendMessage({ text: input });
     setInput("");
   };
 
