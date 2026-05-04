@@ -107,7 +107,7 @@ export default function ScannerPage() {
         isbn: bookData.isbn,
         cover_url: bookData.coverUrl || null,
         shelf: bookData.shelf || "Uncategorized",
-        status: "Unread"
+        status: "Not Read"
       };
       await addBook(newBook);
       setScanResult("saved");
@@ -125,13 +125,25 @@ export default function ScannerPage() {
     setIsSaving(true);
     setError(null);
     try {
+      // Check for duplicate by ISBN if provided
+      if (manualForm.isbn) {
+        const isDup = await checkIfDuplicate(manualForm.isbn);
+        if (isDup) {
+          setIsManualModalOpen(false);
+          setBookData({ title: manualForm.title, author: manualForm.author, isbn: manualForm.isbn });
+          setScanResult("duplicate");
+          setIsScanning(false);
+          setIsSaving(false);
+          return;
+        }
+      }
       const newBook: BookInsert = {
         title: manualForm.title,
         author: manualForm.author,
         isbn: manualForm.isbn || null,
         cover_url: null,
         shelf: manualForm.shelf,
-        status: "Unread"
+        status: "Not Read"
       };
       await addBook(newBook);
       setIsManualModalOpen(false);
@@ -215,8 +227,8 @@ export default function ScannerPage() {
                   <div className="w-12 h-12 rounded-full bg-amber-500/20 flex items-center justify-center mb-3">
                     <AlertTriangle className="w-6 h-6 text-amber-500" />
                   </div>
-                  <h3 className="text-xl font-outfit font-bold text-white mb-1">Duplicate Detected!</h3>
-                  <p className="text-sm text-white/70 mb-4">You already own <strong className="text-white">{bookData.title}</strong>.<br/>Located on: <span className="text-amber-400 font-medium">{bookData.shelf}</span></p>
+                  <h3 className="text-xl font-outfit font-bold text-white mb-1">Already in Library!</h3>
+                  <p className="text-sm text-white/70 mb-4">This book is already in your library: <strong className="text-white">{bookData.title}</strong>.</p>
                 </>
               ) : scanResult === 'saved' ? (
                 <>

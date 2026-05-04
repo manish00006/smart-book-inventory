@@ -170,3 +170,25 @@ export async function updateBook(id: string, updates: Partial<BookInsert>): Prom
     return null;
   }
 }
+
+/**
+ * Delete a book from the library
+ */
+export async function deleteBook(id: string): Promise<boolean> {
+  try {
+    const { error } = await supabase
+      .from('books')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      console.error('Error deleting book:', error.message);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error('Error in deleteBook:', err);
+    return false;
+  }
+}
+
