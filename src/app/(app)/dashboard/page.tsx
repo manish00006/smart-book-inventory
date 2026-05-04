@@ -71,7 +71,7 @@ export default function Dashboard() {
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
           <h1 className="text-3xl font-outfit font-bold text-white mb-2">
-            Welcome back, {profile?.display_name || 'Alex'}.
+            Welcome back, {profile?.display_name || 'Manish'}.
           </h1>
           <p className="text-white/50">Your library is growing! You added {libraryStats.totalBooks} books so far.</p>
         </div>

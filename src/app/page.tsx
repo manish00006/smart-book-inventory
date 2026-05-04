@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { ScanBarcode, Sparkles, BookOpen, Layers } from "lucide-react";
+import { ScanBarcode, Sparkles, BookOpen, Layers, Library } from "lucide-react";
 
 export default function LandingPage() {
   return (
@@ -64,10 +64,17 @@ export default function LandingPage() {
           transition={{ duration: 0.6, delay: 0.3 }}
           className="flex flex-col sm:flex-row items-center gap-4 w-full justify-center"
         >
-          <Link href="/dashboard">
+          <Link href="/scanner">
             <button className="w-full sm:w-auto px-8 py-4 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-white rounded-full font-medium flex items-center justify-center gap-3 transition-all hover:shadow-[0_0_20px_rgba(245,158,11,0.5)] transform hover:-translate-y-1">
               <ScanBarcode className="w-5 h-5" />
               Scan My First Book
+            </button>
+          </Link>
+
+          <Link href="/library">
+            <button className="w-full sm:w-auto px-8 py-4 bg-white/5 hover:bg-white/10 text-white border border-amber-500/30 rounded-full font-medium flex items-center justify-center gap-3 transition-all backdrop-blur-md transform hover:-translate-y-1 hover:shadow-[0_0_15px_rgba(245,158,11,0.2)]">
+              <Library className="w-5 h-5 text-amber-400" />
+              My Library
             </button>
           </Link>
           
