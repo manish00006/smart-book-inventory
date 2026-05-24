@@ -12,7 +12,13 @@ import {
   Trash2,
   ChevronDown,
   AlertTriangle,
-  X
+  X,
+  Sparkles,
+  Calendar,
+  Tag,
+  Library,
+  User,
+  Hash
 } from "lucide-react";
 import { searchBooks, updateBook, deleteBook, Book } from "@/lib/bookService";
 
@@ -45,6 +51,12 @@ export default function LibraryPage() {
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
 
+  // Book detail modal state
+  const [detailBook, setDetailBook] = useState<Book | null>(null);
+  const [bookSummary, setBookSummary] = useState<string | null>(null);
+  const [isSummaryLoading, setIsSummaryLoading] = useState(false);
+  const [summaryError, setSummaryError] = useState<string | null>(null);
+
   const loadBooks = async () => {
     setIsLoading(true);
     const filterValue = statusFilter === "Not Read" ? "Not Read" : statusFilter;
@@ -68,9 +80,45 @@ export default function LibraryPage() {
     }
   }, [toast]);
 
+  // Fetch AI summary when detail modal opens
+  useEffect(() => {
+    if (!detailBook) {
+      setBookSummary(null);
+      setSummaryError(null);
+      return;
+    }
+
+    const fetchSummary = async () => {
+      setIsSummaryLoading(true);
+      setSummaryError(null);
+      setBookSummary(null);
+      try {
+        const res = await fetch("/api/book-summary", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ title: detailBook.title, author: detailBook.author }),
+        });
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.error || "Failed to fetch summary");
+        setBookSummary(json.summary);
+      } catch (err: any) {
+        console.error("Summary fetch error:", err);
+        setSummaryError("Couldn't load summary right now.");
+      } finally {
+        setIsSummaryLoading(false);
+      }
+    };
+
+    fetchSummary();
+  }, [detailBook]);
+
   const handleStatusUpdate = async (bookId: string, newStatus: string) => {
     await updateBook(bookId, { status: newStatus });
     setBooks(books.map(b => b.id === bookId ? { ...b, status: newStatus } : b));
+    // Also update detail modal if open
+    if (detailBook?.id === bookId) {
+      setDetailBook({ ...detailBook, status: newStatus });
+    }
     setToast({ message: `Status updated to "${newStatus}"`, type: "success" });
   };
 
@@ -80,11 +128,16 @@ export default function LibraryPage() {
     if (success) {
       setBooks(books.filter(b => b.id !== bookId));
       setSelectedBookId(null);
+      setDetailBook(null);
       setToast({ message: `"${book?.title}" removed from library`, type: "success" });
     } else {
       setToast({ message: "Failed to delete book", type: "error" });
     }
     setDeleteConfirmId(null);
+  };
+
+  const openBookDetail = (book: Book) => {
+    setDetailBook(book);
   };
 
   const toggleBookSelect = (bookId: string) => {
@@ -153,6 +206,147 @@ export default function LibraryPage() {
                     Delete
                   </button>
                 </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* ========== BOOK DETAIL MODAL ========== */}
+      <AnimatePresence>
+        {detailBook && (
+          <div className="fixed inset-0 z-[80] flex items-end sm:items-center justify-center">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setDetailBook(null)}
+              className="absolute inset-0 bg-black/70 backdrop-blur-md"
+            />
+            <motion.div 
+              initial={{ opacity: 0, y: 100, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 100, scale: 0.95 }}
+              transition={{ type: "spring", damping: 25, stiffness: 300 }}
+              className="relative w-full max-w-lg bg-[#12141f] border border-white/10 rounded-t-3xl sm:rounded-3xl shadow-2xl z-10 overflow-hidden max-h-[90vh] flex flex-col"
+            >
+              {/* Gradient accent bar */}
+              <div className="h-1 bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 flex-shrink-0" />
+              
+              {/* Close button */}
+              <button 
+                onClick={() => setDetailBook(null)}
+                className="absolute top-4 right-4 z-20 p-2 bg-black/40 hover:bg-black/60 rounded-full transition-colors backdrop-blur-sm"
+              >
+                <X className="w-5 h-5 text-white/70" />
+              </button>
+
+              {/* Scrollable content */}
+              <div className="overflow-y-auto flex-1 p-6">
+                {/* Top section: Cover + Info */}
+                <div className="flex gap-5 mb-6">
+                  {/* Book cover */}
+                  <div className="w-28 h-40 flex-shrink-0 rounded-xl overflow-hidden border border-white/10 shadow-lg shadow-black/30">
+                    {detailBook.cover_url ? (
+                      <img src={detailBook.cover_url} alt={detailBook.title} className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full bg-gradient-to-br from-amber-500/20 to-purple-500/20 flex items-center justify-center">
+                        <BookOpen className="w-10 h-10 text-white/20" />
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* Book info */}
+                  <div className="flex-1 min-w-0 pt-1">
+                    <h2 className="text-xl font-outfit font-bold text-white leading-tight mb-1.5 line-clamp-3">{detailBook.title}</h2>
+                    <p className="text-white/60 text-sm mb-4 flex items-center gap-1.5">
+                      <User className="w-3.5 h-3.5 flex-shrink-0" />
+                      {detailBook.author}
+                    </p>
+                    
+                    {/* Status badge */}
+                    <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold border ${getStatusStyle(detailBook.status).bg} ${getStatusStyle(detailBook.status).border} ${getStatusStyle(detailBook.status).text}`}>
+                      <div className={`w-2 h-2 rounded-full ${getStatusStyle(detailBook.status).dot}`} />
+                      {displayStatus(detailBook.status)}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Info chips */}
+                <div className="flex flex-wrap gap-2 mb-6">
+                  {detailBook.isbn && (
+                    <div className="flex items-center gap-1.5 px-3 py-1.5 bg-white/5 border border-white/10 rounded-lg text-xs text-white/50">
+                      <Hash className="w-3 h-3" />
+                      ISBN: <span className="text-white/80">{detailBook.isbn}</span>
+                    </div>
+                  )}
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 bg-white/5 border border-white/10 rounded-lg text-xs text-white/50">
+                    <Library className="w-3 h-3" />
+                    <span className="text-white/80">{detailBook.shelf}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 bg-white/5 border border-white/10 rounded-lg text-xs text-white/50">
+                    <Calendar className="w-3 h-3" />
+                    Added <span className="text-white/80">{new Date(detailBook.added_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                  </div>
+                </div>
+
+                {/* AI Summary Section */}
+                <div className="bg-gradient-to-br from-amber-500/5 to-purple-500/5 border border-white/10 rounded-2xl p-5 mb-6">
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-amber-500 to-orange-500 flex items-center justify-center">
+                      <Sparkles className="w-4 h-4 text-white" />
+                    </div>
+                    <h3 className="text-sm font-outfit font-bold text-white">AI Book Brief</h3>
+                  </div>
+                  
+                  {isSummaryLoading ? (
+                    <div className="flex items-center gap-3 py-3">
+                      <Loader2 className="w-4 h-4 text-amber-500 animate-spin flex-shrink-0" />
+                      <div className="space-y-2 flex-1">
+                        <div className="h-3 bg-white/5 rounded-full w-full animate-pulse" />
+                        <div className="h-3 bg-white/5 rounded-full w-4/5 animate-pulse" />
+                        <div className="h-3 bg-white/5 rounded-full w-3/5 animate-pulse" />
+                      </div>
+                    </div>
+                  ) : summaryError ? (
+                    <p className="text-white/30 text-sm italic">{summaryError}</p>
+                  ) : bookSummary ? (
+                    <p className="text-white/70 text-sm leading-relaxed">{bookSummary}</p>
+                  ) : null}
+                </div>
+
+                {/* Change Status */}
+                <div className="mb-6">
+                  <h3 className="text-xs font-bold text-white/30 uppercase tracking-widest mb-3">Change Status</h3>
+                  <div className="grid grid-cols-2 gap-2">
+                    {STATUS_OPTIONS.map(s => (
+                      <button
+                        key={s}
+                        onClick={() => handleStatusUpdate(detailBook.id, s)}
+                        className={`py-2.5 px-3 rounded-xl text-sm font-medium flex items-center justify-center gap-2 border transition-all ${
+                          detailBook.status === s || (detailBook.status === "Unread" && s === "Not Read")
+                            ? `${getStatusStyle(s).bg} ${getStatusStyle(s).border} ${getStatusStyle(s).text} ring-1 ring-white/5`
+                            : "bg-white/5 border-white/10 text-white/50 hover:bg-white/10 hover:text-white"
+                        }`}
+                      >
+                        <div className={`w-2 h-2 rounded-full ${getStatusStyle(s).dot}`} />
+                        {s}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Delete button */}
+                <button 
+                  onClick={() => {
+                    setDetailBook(null);
+                    setDeleteConfirmId(detailBook.id);
+                  }}
+                  className="w-full py-3 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 rounded-xl flex items-center justify-center gap-2 text-sm font-medium transition-all"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  Remove from Library
+                </button>
               </div>
             </motion.div>
           </div>
@@ -237,80 +431,38 @@ export default function LibraryPage() {
         /* ===== GRID VIEW ===== */
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6">
           {books.map((book, i) => {
-            const isSelected = selectedBookId === book.id;
             return (
               <motion.div
                 key={book.id}
                 initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ duration: 0.3, delay: i * 0.05 }}
-                className="flex flex-col"
+                className="flex flex-col cursor-pointer group"
+                onClick={() => openBookDetail(book)}
               >
-                {/* Book cover — click to toggle actions */}
+                {/* Book cover — click to open detail */}
                 <div 
-                  onClick={() => toggleBookSelect(book.id)}
-                  className={`relative aspect-[2/3] rounded-xl overflow-hidden mb-3 border cursor-pointer transition-all shadow-lg ${
-                    isSelected 
-                      ? "border-amber-500 shadow-amber-500/20 ring-2 ring-amber-500/30" 
-                      : "border-white/10 hover:border-white/30"
-                  }`}
+                  className="relative aspect-[2/3] rounded-xl overflow-hidden mb-3 border border-white/10 hover:border-amber-500/50 transition-all shadow-lg group-hover:shadow-amber-500/10 group-hover:scale-[1.02]"
                 >
                   {book.cover_url ? (
                     <img src={book.cover_url} alt={book.title} className="w-full h-full object-cover" />
                   ) : (
-                    <div className="w-full h-full bg-black/40 flex items-center justify-center">
+                    <div className="w-full h-full bg-gradient-to-br from-amber-500/10 to-purple-500/10 flex items-center justify-center">
                       <BookOpen className="w-8 h-8 text-white/10" />
                     </div>
                   )}
 
-                  {/* Overlay when selected */}
-                  <AnimatePresence>
-                    {isSelected && (
-                      <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        className="absolute inset-0 bg-black/70 backdrop-blur-sm flex flex-col items-center justify-center p-3 gap-2"
-                      >
-                        <p className="text-white/60 text-[10px] uppercase tracking-widest font-bold mb-1">Set Status</p>
-                        {STATUS_OPTIONS.map(s => (
-                          <button
-                            key={s}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleStatusUpdate(book.id, s);
-                            }}
-                            className={`w-full py-2 px-3 rounded-lg text-xs font-medium flex items-center gap-2 transition-all ${
-                              book.status === s || (book.status === "Unread" && s === "Not Read")
-                                ? `${getStatusStyle(s).bg} ${getStatusStyle(s).border} border ${getStatusStyle(s).text} ring-1 ring-white/10`
-                                : "bg-white/5 border border-white/10 text-white/70 hover:bg-white/15 hover:text-white"
-                            }`}
-                          >
-                            <div className={`w-2 h-2 rounded-full ${getStatusStyle(s).dot}`} />
-                            {s}
-                          </button>
-                        ))}
-                        {/* Delete */}
-                        <button 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setDeleteConfirmId(book.id);
-                          }}
-                          className="w-full py-2 px-3 bg-red-500/15 hover:bg-red-500/25 border border-red-500/30 text-red-400 rounded-lg flex items-center justify-center gap-2 text-xs font-medium transition-all mt-1"
-                        >
-                          <Trash2 className="w-3 h-3" />
-                          Delete Book
-                        </button>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
+                  {/* Hover overlay hint */}
+                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
+                    <Sparkles className="w-6 h-6 text-white/0 group-hover:text-white/70 transition-colors" />
+                  </div>
 
                   {/* Status badge (always visible) */}
                   <div className={`absolute top-2 right-2 px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider backdrop-blur-md border ${getStatusStyle(book.status).bg} ${getStatusStyle(book.status).border} ${getStatusStyle(book.status).text}`}>
                     {displayStatus(book.status)}
                   </div>
                 </div>
-                <h4 className="text-white font-medium text-sm line-clamp-1">{book.title}</h4>
+                <h4 className="text-white font-medium text-sm line-clamp-1 group-hover:text-amber-400 transition-colors">{book.title}</h4>
                 <p className="text-white/40 text-xs line-clamp-1">{book.author}</p>
               </motion.div>
             );
@@ -320,86 +472,35 @@ export default function LibraryPage() {
         /* ===== LIST VIEW ===== */
         <div className="glass-card rounded-2xl overflow-hidden divide-y divide-white/5 border border-white/5">
           {books.map((book) => {
-            const isSelected = selectedBookId === book.id;
             return (
-              <div key={book.id}>
-                <div 
-                  onClick={() => toggleBookSelect(book.id)}
-                  className={`flex items-center gap-4 sm:gap-6 p-4 cursor-pointer transition-colors ${
-                    isSelected ? "bg-amber-500/5" : "hover:bg-white/5"
-                  }`}
-                >
-                  <div className={`w-12 h-16 rounded border overflow-hidden flex-shrink-0 transition-all ${
-                    isSelected ? "border-amber-500" : "border-white/10"
-                  }`}>
-                    {book.cover_url ? (
-                      <img src={book.cover_url} alt={book.title} className="w-full h-full object-cover" />
-                    ) : (
-                      <div className="w-full h-full bg-black/40 flex items-center justify-center">
-                        <BookOpen className="w-4 h-4 text-white/10" />
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h4 className={`font-medium line-clamp-1 transition-colors ${isSelected ? "text-amber-400" : "text-white"}`}>{book.title}</h4>
-                    <p className="text-white/50 text-sm">{book.author}</p>
-                  </div>
-                  <div className="hidden sm:block">
-                    <div className="text-xs text-white/30 uppercase tracking-widest font-bold mb-1">Shelf</div>
-                    <div className="text-sm text-white/70">{book.shelf}</div>
-                  </div>
-                  {/* Status badge */}
-                  <div className={`px-3 py-1.5 rounded-lg text-xs font-medium border flex items-center gap-2 ${getStatusStyle(book.status).bg} ${getStatusStyle(book.status).border} ${getStatusStyle(book.status).text}`}>
-                    <div className={`w-1.5 h-1.5 rounded-full ${getStatusStyle(book.status).dot}`} />
-                    <span className="hidden sm:inline">{displayStatus(book.status)}</span>
-                  </div>
-                  <ChevronDown className={`w-4 h-4 text-white/30 transition-transform ${isSelected ? "rotate-180" : ""}`} />
-                </div>
-
-                {/* Expanded actions panel */}
-                <AnimatePresence>
-                  {isSelected && (
-                    <motion.div
-                      initial={{ height: 0, opacity: 0 }}
-                      animate={{ height: "auto", opacity: 1 }}
-                      exit={{ height: 0, opacity: 0 }}
-                      transition={{ duration: 0.2 }}
-                      className="overflow-hidden"
-                    >
-                      <div className="px-4 pb-4 pt-1 flex flex-wrap items-center gap-2 border-t border-white/5 bg-white/[0.02]">
-                        <span className="text-[10px] uppercase tracking-widest font-bold text-white/30 mr-2">Status:</span>
-                        {STATUS_OPTIONS.map(s => (
-                          <button
-                            key={s}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleStatusUpdate(book.id, s);
-                            }}
-                            className={`px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-2 border transition-all ${
-                              book.status === s || (book.status === "Unread" && s === "Not Read")
-                                ? `${getStatusStyle(s).bg} ${getStatusStyle(s).border} ${getStatusStyle(s).text}`
-                                : "bg-white/5 border-white/10 text-white/50 hover:bg-white/10 hover:text-white"
-                            }`}
-                          >
-                            <div className={`w-1.5 h-1.5 rounded-full ${getStatusStyle(s).dot}`} />
-                            {s}
-                          </button>
-                        ))}
-                        <div className="flex-1" />
-                        <button 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setDeleteConfirmId(book.id);
-                          }}
-                          className="px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 rounded-lg flex items-center gap-2 text-xs font-medium transition-all"
-                        >
-                          <Trash2 className="w-3 h-3" />
-                          Delete
-                        </button>
-                      </div>
-                    </motion.div>
+              <div 
+                key={book.id}
+                onClick={() => openBookDetail(book)}
+                className="flex items-center gap-4 sm:gap-6 p-4 cursor-pointer transition-colors hover:bg-white/5 group"
+              >
+                <div className="w-12 h-16 rounded border border-white/10 overflow-hidden flex-shrink-0 group-hover:border-amber-500/50 transition-all">
+                  {book.cover_url ? (
+                    <img src={book.cover_url} alt={book.title} className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full bg-gradient-to-br from-amber-500/10 to-purple-500/10 flex items-center justify-center">
+                      <BookOpen className="w-4 h-4 text-white/10" />
+                    </div>
                   )}
-                </AnimatePresence>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h4 className="font-medium line-clamp-1 text-white group-hover:text-amber-400 transition-colors">{book.title}</h4>
+                  <p className="text-white/50 text-sm">{book.author}</p>
+                </div>
+                <div className="hidden sm:block">
+                  <div className="text-xs text-white/30 uppercase tracking-widest font-bold mb-1">Shelf</div>
+                  <div className="text-sm text-white/70">{book.shelf}</div>
+                </div>
+                {/* Status badge */}
+                <div className={`px-3 py-1.5 rounded-lg text-xs font-medium border flex items-center gap-2 ${getStatusStyle(book.status).bg} ${getStatusStyle(book.status).border} ${getStatusStyle(book.status).text}`}>
+                  <div className={`w-1.5 h-1.5 rounded-full ${getStatusStyle(book.status).dot}`} />
+                  <span className="hidden sm:inline">{displayStatus(book.status)}</span>
+                </div>
+                <Sparkles className="w-4 h-4 text-white/10 group-hover:text-amber-500/50 transition-colors" />
               </div>
             );
           })}
