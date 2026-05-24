@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ScanBarcode, AlertTriangle, BookCheck, Database, Loader2, CheckCircle2, X, BookOpen, User, Hash, Library, Camera, ImagePlus, Trash2 } from "lucide-react";
+import { ScanBarcode, AlertTriangle, BookCheck, Database, Loader2, CheckCircle2, X, BookOpen, User, Hash, Library, Camera, ImagePlus, Trash2, Sparkles } from "lucide-react";
 import { Html5QrcodeScanner, Html5QrcodeSupportedFormats } from "html5-qrcode";
 import { checkIfDuplicate, addBook, BookInsert } from "@/lib/bookService";
 
@@ -29,6 +29,7 @@ export default function ScannerPage() {
   const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null); // base64 data URL
   const [capturedFile, setCapturedFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [isExtracting, setIsExtracting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   const scannerRef = useRef<Html5QrcodeScanner | null>(null);
@@ -147,15 +148,39 @@ export default function ScannerPage() {
     
     // Create preview
     const reader = new FileReader();
-    reader.onload = (ev) => {
-      setCapturedPhoto(ev.target?.result as string);
+    reader.onload = async (ev) => {
+      const base64 = ev.target?.result as string;
+      setCapturedPhoto(base64);
+
+      // Auto-open manual entry modal
+      if (!isManualModalOpen) {
+        setIsManualModalOpen(true);
+      }
+
+      // 🧠 AI Vision: Extract book info from the photo
+      setIsExtracting(true);
+      try {
+        const res = await fetch("/api/extract-book", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ image: base64 }),
+        });
+        const json = await res.json();
+        if (res.ok && (json.title || json.author)) {
+          setManualForm(prev => ({
+            ...prev,
+            title: json.title || prev.title,
+            author: json.author || prev.author,
+            isbn: json.isbn || prev.isbn,
+          }));
+        }
+      } catch (err) {
+        console.warn("AI extraction failed, user can fill manually:", err);
+      } finally {
+        setIsExtracting(false);
+      }
     };
     reader.readAsDataURL(file);
-
-    // Auto-open manual entry modal so user can fill in book details alongside the photo
-    if (!isManualModalOpen) {
-      setIsManualModalOpen(true);
-    }
   };
 
   const removePhoto = () => {
@@ -519,11 +544,21 @@ export default function ScannerPage() {
                         alt="Captured book cover"
                         className="w-full h-full object-contain"
                       />
+                      {/* Extracting overlay */}
+                      {isExtracting && (
+                        <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex flex-col items-center justify-center gap-2 z-10">
+                          <Sparkles className="w-6 h-6 text-amber-400 animate-pulse" />
+                          <span className="text-xs text-amber-300 font-medium animate-pulse">AI reading cover...</span>
+                        </div>
+                      )}
                       {/* Overlay with status */}
-                      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-3 flex items-center justify-between">
+                      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-3 flex items-center justify-between z-20">
                         <div className="flex items-center gap-2">
-                          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                          <span className="text-xs text-emerald-300 font-medium">Photo captured</span>
+                          {isExtracting ? (
+                            <><Loader2 className="w-4 h-4 text-amber-400 animate-spin" /><span className="text-xs text-amber-300 font-medium">Analyzing...</span></>
+                          ) : (
+                            <><CheckCircle2 className="w-4 h-4 text-emerald-400" /><span className="text-xs text-emerald-300 font-medium">Auto-filled ✓</span></>
+                          )}
                         </div>
                         <button
                           type="button"
