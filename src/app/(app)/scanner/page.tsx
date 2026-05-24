@@ -184,7 +184,7 @@ export default function ScannerPage() {
 
       try {
         // 🧠 Step 1: Send to AI Vision API
-        let bookInfo = { title: '', author: '', isbn: '', coverUrl: '' };
+        let bookInfo = { title: '', author: '', isbn: '', coverUrl: '', subtitle: '', keywords: '' };
         
         try {
           const res = await fetch("/api/extract-book", {
@@ -199,6 +199,8 @@ export default function ScannerPage() {
               author: json.author || '',
               isbn: json.isbn || '',
               coverUrl: json.coverUrl || '',
+              subtitle: json.subtitle || '',
+              keywords: json.keywords || '',
             };
           }
         } catch (apiErr) {
@@ -206,18 +208,30 @@ export default function ScannerPage() {
         }
 
         // 🔍 Step 2: Client-side fallback if server didn't get title
-        if (!bookInfo.title && bookInfo.isbn) {
-          console.log("Server returned ISBN but no title, trying client-side OpenLibrary...");
-          // Try ISBN lookup
-          const ol1 = await lookupOpenLibrary(bookInfo.isbn, 'isbn');
-          if (ol1?.title) {
-            bookInfo = { ...bookInfo, title: ol1.title, author: ol1.author || bookInfo.author, coverUrl: ol1.coverUrl || bookInfo.coverUrl, isbn: ol1.isbn || bookInfo.isbn };
+        if (!bookInfo.title) {
+          console.log("No title from server, trying client-side OpenLibrary...");
+          
+          // Try ISBN
+          if (bookInfo.isbn) {
+            const ol1 = await lookupOpenLibrary(bookInfo.isbn, 'isbn');
+            if (ol1?.title) {
+              bookInfo = { ...bookInfo, title: ol1.title, author: ol1.author || bookInfo.author, coverUrl: ol1.coverUrl || bookInfo.coverUrl, isbn: ol1.isbn || bookInfo.isbn };
+            }
           }
-          // Try as text search
-          if (!bookInfo.title) {
-            const ol2 = await lookupOpenLibrary(bookInfo.isbn, 'text');
+
+          // Try subtitle (e.g. "Remember, Interpret, and Live Your Dreams")
+          if (!bookInfo.title && bookInfo.subtitle) {
+            const ol2 = await lookupOpenLibrary(bookInfo.subtitle, 'text');
             if (ol2?.title) {
               bookInfo = { ...bookInfo, title: ol2.title, author: ol2.author || bookInfo.author, coverUrl: ol2.coverUrl || bookInfo.coverUrl, isbn: ol2.isbn || bookInfo.isbn };
+            }
+          }
+
+          // Try keywords
+          if (!bookInfo.title && bookInfo.keywords) {
+            const ol3 = await lookupOpenLibrary(bookInfo.keywords, 'text');
+            if (ol3?.title) {
+              bookInfo = { ...bookInfo, title: ol3.title, author: ol3.author || bookInfo.author, coverUrl: ol3.coverUrl || bookInfo.coverUrl, isbn: ol3.isbn || bookInfo.isbn };
             }
           }
         }
