@@ -164,6 +164,28 @@ export default function ScannerPage() {
     return null;
   };
 
+  // Compress image for AI analysis (phone photos are too large for Vercel's 4.5MB body limit)
+  const compressImage = (dataUrl: string, maxWidth = 800): Promise<string> => {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let w = img.width;
+        let h = img.height;
+        if (w > maxWidth) {
+          h = (h * maxWidth) / w;
+          w = maxWidth;
+        }
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        ctx?.drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL('image/jpeg', 0.7));
+      };
+      img.src = dataUrl;
+    });
+  };
+
   // Handle photo capture from camera or file picker
   const handlePhotoCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -176,6 +198,10 @@ export default function ScannerPage() {
     reader.onload = async (ev) => {
       const base64 = ev.target?.result as string;
       setCapturedPhoto(base64);
+
+      // Compress image for AI (phone photos are 5-10MB, Vercel limit is 4.5MB)
+      const compressed = await compressImage(base64);
+      console.log(`Image compressed: ${(base64.length / 1024).toFixed(0)}KB → ${(compressed.length / 1024).toFixed(0)}KB`);
 
       // Show loading state on the scanner area
       setIsScanning(false);
@@ -190,7 +216,7 @@ export default function ScannerPage() {
           const res = await fetch("/api/extract-book", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ image: base64 }),
+            body: JSON.stringify({ image: compressed }),
           });
           if (res.ok) {
             const json = await res.json();
