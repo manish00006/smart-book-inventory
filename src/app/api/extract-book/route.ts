@@ -5,8 +5,65 @@ import { NextRequest, NextResponse } from 'next/server';
 export const maxDuration = 30;
 
 /**
- * POST /api/extract-book — Extract book info from a cover photo using AI Vision
- * Focused: just extract text, then do ONE fast lookup. Client handles fallbacks.
+ * Search OpenLibrary (FREE, no API key, no rate limit)
+ */
+async function searchOpenLibrary(query: string, type: 'isbn' | 'text') {
+  try {
+    let url: string;
+    if (type === 'isbn') {
+      // Search by ISBN
+      url = `https://openlibrary.org/search.json?isbn=${encodeURIComponent(query)}&limit=1&fields=title,author_name,isbn,cover_i`;
+    } else {
+      // General text search
+      url = `https://openlibrary.org/search.json?q=${encodeURIComponent(query)}&limit=1&fields=title,author_name,isbn,cover_i`;
+    }
+
+    const res = await fetch(url);
+    const data = await res.json();
+
+    if (data.numFound > 0 && data.docs?.[0]) {
+      const doc = data.docs[0];
+      const coverId = doc.cover_i;
+      return {
+        title: doc.title || '',
+        author: doc.author_name?.[0] || '',
+        isbn: doc.isbn?.[0] || '',
+        coverUrl: coverId ? `https://covers.openlibrary.org/b/id/${coverId}-L.jpg` : '',
+      };
+    }
+  } catch (e) {
+    console.warn('OpenLibrary search failed:', e);
+  }
+  return null;
+}
+
+/**
+ * Try Google Books as secondary (may hit rate limits without API key)
+ */
+async function searchGoogleBooks(query: string) {
+  try {
+    const res = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(query)}&maxResults=1`);
+    const data = await res.json();
+    if (data.totalItems > 0 && data.items?.[0]?.volumeInfo) {
+      const vol = data.items[0].volumeInfo;
+      const isbn13 = vol.industryIdentifiers?.find((id: any) => id.type === 'ISBN_13')?.identifier || '';
+      const isbn10 = vol.industryIdentifiers?.find((id: any) => id.type === 'ISBN_10')?.identifier || '';
+      return {
+        title: vol.title || '',
+        author: vol.authors?.[0] || '',
+        isbn: isbn13 || isbn10 || '',
+        coverUrl: vol.imageLinks?.thumbnail?.replace('http:', 'https:') || '',
+      };
+    }
+  } catch (e) {
+    console.warn('Google Books failed (likely rate limited):', e);
+  }
+  return null;
+}
+
+/**
+ * POST /api/extract-book — Extract book info from a cover photo
+ * Uses AI Vision + OpenLibrary (free, unlimited) + Google Books (backup)
  */
 export async function POST(request: NextRequest) {
   try {
@@ -84,51 +141,43 @@ If a field is not visible, use "". Return ONLY the JSON object, nothing else.`,
 
     console.log('AI extracted:', JSON.stringify(aiResult));
 
-    // Step 2: Quick parallel lookups (only if we have something to search)
     const cleanISBN = aiResult.isbn.replace(/[^0-9X]/gi, '');
-    let result = { title: aiResult.title, author: aiResult.author, isbn: cleanISBN, coverUrl: '' };
 
-    // Run Google Books lookups in parallel to save time
+    // Step 2: Run OpenLibrary lookups IN PARALLEL (free, no rate limit!)
     const lookupPromises: Promise<any>[] = [];
 
+    // Search by ISBN on OpenLibrary
     if (cleanISBN.length >= 8) {
-      // ISBN exact + fuzzy
-      lookupPromises.push(
-        fetch(`https://www.googleapis.com/books/v1/volumes?q=isbn:${cleanISBN}&maxResults=1`)
-          .then(r => r.json()).catch(() => null)
-      );
-      lookupPromises.push(
-        fetch(`https://www.googleapis.com/books/v1/volumes?q=${cleanISBN}&maxResults=1`)
-          .then(r => r.json()).catch(() => null)
-      );
+      lookupPromises.push(searchOpenLibrary(cleanISBN, 'isbn'));
+    }
+    // Search by title on OpenLibrary
+    if (aiResult.title) {
+      lookupPromises.push(searchOpenLibrary(`${aiResult.title} ${aiResult.author}`.trim(), 'text'));
+    }
+    // Search by allText on OpenLibrary
+    if (aiResult.allText && aiResult.allText.length > 3) {
+      lookupPromises.push(searchOpenLibrary(aiResult.allText, 'text'));
+    }
+    // Also try Google Books as backup (may fail due to rate limit)
+    if (cleanISBN.length >= 8) {
+      lookupPromises.push(searchGoogleBooks(cleanISBN));
     }
 
-    if (aiResult.title) {
-      const q = encodeURIComponent(`${aiResult.title} ${aiResult.author}`.trim());
-      lookupPromises.push(
-        fetch(`https://www.googleapis.com/books/v1/volumes?q=${q}&maxResults=1`)
-          .then(r => r.json()).catch(() => null)
-      );
-    }
+    let result = { title: aiResult.title, author: aiResult.author, isbn: cleanISBN, coverUrl: '' };
 
     if (lookupPromises.length > 0) {
       const results = await Promise.all(lookupPromises);
-      
-      for (const data of results) {
-        if (data?.totalItems > 0 && data?.items?.[0]?.volumeInfo) {
-          const vol = data.items[0].volumeInfo;
-          if (vol.title) {
-            const isbn13 = vol.industryIdentifiers?.find((id: any) => id.type === 'ISBN_13')?.identifier || '';
-            const isbn10 = vol.industryIdentifiers?.find((id: any) => id.type === 'ISBN_10')?.identifier || '';
-            result = {
-              title: vol.title,
-              author: vol.authors?.[0] || aiResult.author || '',
-              isbn: isbn13 || isbn10 || cleanISBN,
-              coverUrl: vol.imageLinks?.thumbnail?.replace('http:', 'https:') || '',
-            };
-            console.log('✅ Found book:', result.title, 'by', result.author);
-            break;
-          }
+
+      for (const found of results) {
+        if (found?.title) {
+          result = {
+            title: found.title,
+            author: found.author || aiResult.author || '',
+            isbn: found.isbn || cleanISBN,
+            coverUrl: found.coverUrl || '',
+          };
+          console.log('✅ Found book:', result.title, 'by', result.author);
+          break;
         }
       }
     }

@@ -139,24 +139,27 @@ export default function ScannerPage() {
     };
   }, [isScanning, isManualModalOpen]);
 
-  // Client-side Google Books lookup (bypasses server timeout issues)
-  const lookupGoogleBooks = async (query: string) => {
+  // Client-side OpenLibrary lookup (FREE, no rate limits!)
+  const lookupOpenLibrary = async (query: string, type: 'isbn' | 'text') => {
     try {
-      const res = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(query)}&maxResults=1`);
+      const url = type === 'isbn'
+        ? `https://openlibrary.org/search.json?isbn=${encodeURIComponent(query)}&limit=1&fields=title,author_name,isbn,cover_i`
+        : `https://openlibrary.org/search.json?q=${encodeURIComponent(query)}&limit=1&fields=title,author_name,isbn,cover_i`;
+      
+      const res = await fetch(url);
       const data = await res.json();
-      if (data.totalItems > 0 && data.items?.[0]?.volumeInfo) {
-        const vol = data.items[0].volumeInfo;
-        const isbn13 = vol.industryIdentifiers?.find((id: any) => id.type === 'ISBN_13')?.identifier || '';
-        const isbn10 = vol.industryIdentifiers?.find((id: any) => id.type === 'ISBN_10')?.identifier || '';
+      if (data.numFound > 0 && data.docs?.[0]) {
+        const doc = data.docs[0];
+        const coverId = doc.cover_i;
         return {
-          title: vol.title || '',
-          author: vol.authors?.[0] || '',
-          isbn: isbn13 || isbn10 || '',
-          coverUrl: vol.imageLinks?.thumbnail?.replace('http:', 'https:') || '',
+          title: doc.title || '',
+          author: doc.author_name?.[0] || '',
+          isbn: doc.isbn?.[0] || '',
+          coverUrl: coverId ? `https://covers.openlibrary.org/b/id/${coverId}-L.jpg` : '',
         };
       }
     } catch (e) {
-      console.warn('Client Google Books lookup failed:', e);
+      console.warn('Client OpenLibrary lookup failed:', e);
     }
     return null;
   };
@@ -204,17 +207,17 @@ export default function ScannerPage() {
 
         // 🔍 Step 2: Client-side fallback if server didn't get title
         if (!bookInfo.title && bookInfo.isbn) {
-          console.log("Server returned ISBN but no title, trying client-side lookup...");
-          // Try exact ISBN
-          const gb1 = await lookupGoogleBooks(`isbn:${bookInfo.isbn}`);
-          if (gb1?.title) {
-            bookInfo = { ...bookInfo, title: gb1.title, author: gb1.author || bookInfo.author, coverUrl: gb1.coverUrl || bookInfo.coverUrl, isbn: gb1.isbn || bookInfo.isbn };
+          console.log("Server returned ISBN but no title, trying client-side OpenLibrary...");
+          // Try ISBN lookup
+          const ol1 = await lookupOpenLibrary(bookInfo.isbn, 'isbn');
+          if (ol1?.title) {
+            bookInfo = { ...bookInfo, title: ol1.title, author: ol1.author || bookInfo.author, coverUrl: ol1.coverUrl || bookInfo.coverUrl, isbn: ol1.isbn || bookInfo.isbn };
           }
-          // Try fuzzy ISBN search
+          // Try as text search
           if (!bookInfo.title) {
-            const gb2 = await lookupGoogleBooks(bookInfo.isbn);
-            if (gb2?.title) {
-              bookInfo = { ...bookInfo, title: gb2.title, author: gb2.author || bookInfo.author, coverUrl: gb2.coverUrl || bookInfo.coverUrl, isbn: gb2.isbn || bookInfo.isbn };
+            const ol2 = await lookupOpenLibrary(bookInfo.isbn, 'text');
+            if (ol2?.title) {
+              bookInfo = { ...bookInfo, title: ol2.title, author: ol2.author || bookInfo.author, coverUrl: ol2.coverUrl || bookInfo.coverUrl, isbn: ol2.isbn || bookInfo.isbn };
             }
           }
         }
