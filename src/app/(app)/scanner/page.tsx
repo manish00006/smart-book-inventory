@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ScanBarcode, AlertTriangle, BookCheck, Database, Loader2, CheckCircle2, X, BookOpen, User, Hash, Library } from "lucide-react";
+import { ScanBarcode, AlertTriangle, BookCheck, Database, Loader2, CheckCircle2, X, BookOpen, User, Hash, Library, Camera, ImagePlus, Trash2 } from "lucide-react";
 import { Html5QrcodeScanner, Html5QrcodeSupportedFormats } from "html5-qrcode";
 import { checkIfDuplicate, addBook, BookInsert } from "@/lib/bookService";
 
@@ -24,6 +24,12 @@ export default function ScannerPage() {
     isbn: "",
     shelf: "Main Shelf"
   });
+
+  // Photo capture state
+  const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null); // base64 data URL
+  const [capturedFile, setCapturedFile] = useState<File | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   
   const scannerRef = useRef<Html5QrcodeScanner | null>(null);
 
@@ -132,6 +138,57 @@ export default function ScannerPage() {
     };
   }, [isScanning, isManualModalOpen]);
 
+  // Handle photo capture from camera or file picker
+  const handlePhotoCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setCapturedFile(file);
+    
+    // Create preview
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      setCapturedPhoto(ev.target?.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const removePhoto = () => {
+    setCapturedPhoto(null);
+    setCapturedFile(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
+  // Upload photo to server
+  const uploadPhoto = async (): Promise<string | null> => {
+    if (!capturedFile) return null;
+
+    setIsUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", capturedFile);
+
+      const res = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+      });
+
+      const json = await res.json();
+      if (!res.ok) {
+        throw new Error(json.error || "Upload failed");
+      }
+      return json.url;
+    } catch (err: any) {
+      console.error("Photo upload error:", err);
+      // If upload fails, convert to base64 data URL as fallback
+      return capturedPhoto;
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
   const handleAddToLibrary = async () => {
     if (!bookData) return;
     setIsSaving(true);
@@ -175,18 +232,27 @@ export default function ScannerPage() {
           return;
         }
       }
+
+      // Upload photo if captured
+      let coverUrl: string | null = null;
+      if (capturedFile) {
+        coverUrl = await uploadPhoto();
+      }
+
       const newBook: BookInsert = {
         title: manualForm.title,
         author: manualForm.author,
         isbn: manualForm.isbn || null,
-        cover_url: null,
+        cover_url: coverUrl,
         shelf: manualForm.shelf,
         status: "Not Read"
       };
       await addBook(newBook);
       setIsManualModalOpen(false);
       setManualForm({ title: "", author: "", isbn: "", shelf: "Main Shelf" });
-      setBookData({ title: newBook.title, author: newBook.author, isbn: newBook.isbn || "" });
+      setCapturedPhoto(null);
+      setCapturedFile(null);
+      setBookData({ title: newBook.title, author: newBook.author, isbn: newBook.isbn || "", coverUrl: coverUrl || undefined });
       setScanResult("saved");
       setIsScanning(false);
     } catch (err: any) {
@@ -201,6 +267,8 @@ export default function ScannerPage() {
     setBookData(null);
     setError(null);
     setIsSaving(false);
+    setCapturedPhoto(null);
+    setCapturedFile(null);
     setIsScanning(true);
     if (scannerRef.current) {
       scannerRef.current.resume();
@@ -327,6 +395,17 @@ export default function ScannerPage() {
         </button>
       </div>
 
+      {/* Hidden file input for camera capture */}
+      <input 
+        ref={fileInputRef}
+        type="file" 
+        accept="image/*" 
+        capture="environment"
+        onChange={handlePhotoCapture}
+        className="hidden"
+        id="book-cover-capture"
+      />
+
       {/* Manual Entry Modal */}
       <AnimatePresence>
         {isManualModalOpen && (
@@ -335,31 +414,101 @@ export default function ScannerPage() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              onClick={() => setIsManualModalOpen(false)}
+              onClick={() => { setIsManualModalOpen(false); removePhoto(); }}
               className="absolute inset-0 bg-black/60 backdrop-blur-sm"
             />
             <motion.div 
               initial={{ scale: 0.9, opacity: 0, y: 20 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.9, opacity: 0, y: 20 }}
-              className="relative w-full max-w-md bg-[#1a1c2e] border border-white/10 rounded-3xl p-8 shadow-2xl z-10 overflow-hidden"
+              className="relative w-full max-w-md bg-[#1a1c2e] border border-white/10 rounded-3xl p-6 sm:p-8 shadow-2xl z-10 overflow-y-auto max-h-[90vh]"
             >
               <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-amber-500 to-amber-300" />
               
-              <div className="flex items-center justify-between mb-8">
+              <div className="flex items-center justify-between mb-6">
                 <div>
                   <h2 className="text-2xl font-outfit font-bold text-white">Manual Entry</h2>
-                  <p className="text-white/50 text-sm">Add a book details manually</p>
+                  <p className="text-white/50 text-sm">Add book details & snap a cover photo</p>
                 </div>
                 <button 
-                  onClick={() => setIsManualModalOpen(false)}
+                  onClick={() => { setIsManualModalOpen(false); removePhoto(); }}
                   className="p-2 hover:bg-white/5 rounded-full transition-colors"
                 >
                   <X className="w-6 h-6 text-white/50" />
                 </button>
               </div>
 
-              <form onSubmit={handleManualSubmit} className="space-y-5">
+              <form onSubmit={handleManualSubmit} className="space-y-4">
+                
+                {/* 📸 Book Cover Photo Section */}
+                <div className="space-y-2">
+                  <label className="text-xs font-medium text-white/40 uppercase tracking-wider ml-1">Book Cover Photo</label>
+                  
+                  {!capturedPhoto ? (
+                    <div className="flex gap-3">
+                      {/* Take Photo Button */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (fileInputRef.current) {
+                            fileInputRef.current.setAttribute("capture", "environment");
+                            fileInputRef.current.click();
+                          }
+                        }}
+                        className="flex-1 flex flex-col items-center justify-center gap-2 py-5 bg-gradient-to-br from-amber-500/20 to-amber-600/10 border-2 border-dashed border-amber-500/40 rounded-2xl hover:border-amber-500/70 transition-all group"
+                      >
+                        <div className="w-10 h-10 rounded-full bg-amber-500/20 flex items-center justify-center group-hover:scale-110 transition-transform">
+                          <Camera className="w-5 h-5 text-amber-400" />
+                        </div>
+                        <span className="text-sm text-amber-300 font-medium">Take Photo</span>
+                      </button>
+
+                      {/* Choose from Gallery */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (fileInputRef.current) {
+                            fileInputRef.current.removeAttribute("capture");
+                            fileInputRef.current.click();
+                          }
+                        }}
+                        className="flex-1 flex flex-col items-center justify-center gap-2 py-5 bg-gradient-to-br from-purple-500/20 to-purple-600/10 border-2 border-dashed border-purple-500/40 rounded-2xl hover:border-purple-500/70 transition-all group"
+                      >
+                        <div className="w-10 h-10 rounded-full bg-purple-500/20 flex items-center justify-center group-hover:scale-110 transition-transform">
+                          <ImagePlus className="w-5 h-5 text-purple-400" />
+                        </div>
+                        <span className="text-sm text-purple-300 font-medium">From Gallery</span>
+                      </button>
+                    </div>
+                  ) : (
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.9 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      className="relative w-full aspect-[3/4] max-h-[200px] rounded-2xl overflow-hidden border border-white/10 bg-black/30"
+                    >
+                      <img 
+                        src={capturedPhoto}
+                        alt="Captured book cover"
+                        className="w-full h-full object-contain"
+                      />
+                      {/* Overlay with status */}
+                      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-3 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                          <span className="text-xs text-emerald-300 font-medium">Photo captured</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={removePhoto}
+                          className="p-1.5 bg-red-500/20 hover:bg-red-500/40 rounded-lg transition-colors"
+                        >
+                          <Trash2 className="w-4 h-4 text-red-400" />
+                        </button>
+                      </div>
+                    </motion.div>
+                  )}
+                </div>
+
                 <div className="space-y-2">
                   <label className="text-xs font-medium text-white/40 uppercase tracking-wider ml-1">Book Title</label>
                   <div className="relative">
@@ -424,11 +573,11 @@ export default function ScannerPage() {
 
                 <button 
                   type="submit"
-                  disabled={isSaving}
-                  className="w-full py-4 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white rounded-xl font-bold text-lg transition-all shadow-lg shadow-amber-500/20 flex items-center justify-center gap-3 mt-4"
+                  disabled={isSaving || isUploading}
+                  className="w-full py-4 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white rounded-xl font-bold text-lg transition-all shadow-lg shadow-amber-500/20 flex items-center justify-center gap-3 mt-2"
                 >
-                  {isSaving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Database className="w-5 h-5" />}
-                  {isSaving ? "Adding..." : "Add to Collection"}
+                  {(isSaving || isUploading) ? <Loader2 className="w-5 h-5 animate-spin" /> : <Database className="w-5 h-5" />}
+                  {isUploading ? "Uploading Photo..." : isSaving ? "Adding..." : "Add to Collection"}
                 </button>
               </form>
             </motion.div>
