@@ -68,7 +68,7 @@ IMPORTANT:
 
     try {
       const { text } = await generateText({
-        model: groq('llama-3.2-90b-vision-preview'),
+        model: groq('meta-llama/llama-4-scout-17b-16e-instruct'),
         messages: [{ role: 'user', content: [{ type: 'image', image }, { type: 'text', text: visionPrompt }] }],
       });
       const m = text.match(/\{[\s\S]*\}/);
@@ -84,27 +84,7 @@ IMPORTANT:
         };
       }
     } catch (e: any) {
-      console.warn('90B vision failed, trying 11B:', e.message);
-      try {
-        const { text } = await generateText({
-          model: groq('llama-3.2-11b-vision-preview'),
-          messages: [{ role: 'user', content: [{ type: 'image', image }, { type: 'text', text: visionPrompt }] }],
-        });
-        const m = text.match(/\{[\s\S]*\}/);
-        if (m) {
-          const p = JSON.parse(m[0]);
-          aiResult = {
-            title: String(p.title || '').trim(),
-            author: String(p.author || '').trim(),
-            isbn: String(p.isbn || '').replace(/[-\s]/g, '').trim(),
-            subtitle: String(p.subtitle || '').trim(),
-            publisher: String(p.publisher || '').trim(),
-            keywords: String(p.keywords || '').trim(),
-          };
-        }
-      } catch (e2) {
-        console.error('Both vision models failed');
-      }
+      console.error('Llama 4 Scout vision failed:', e.message);
     }
 
     console.log('AI Vision result:', JSON.stringify(aiResult));
