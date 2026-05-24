@@ -71,23 +71,26 @@ export async function getLibraryStats() {
 
 /**
  * Check if an ISBN already exists in the library
+ * Uses server-side API to avoid client-side CORS/RLS issues
  */
 export async function checkIfDuplicate(isbn: string): Promise<boolean> {
   if (!isbn) return false;
   
   try {
-    const { data, error } = await supabase
-      .from('books')
-      .select('id')
-      .eq('isbn', isbn)
-      .limit(1);
-
-    if (error) {
-      console.error('Error checking duplicate:', error.message);
-      return false;
+    const res = await fetch(`/api/books?isbn=${encodeURIComponent(isbn)}`);
+    if (!res.ok) {
+      console.error('API error checking duplicate:', res.statusText);
+      // Fallback to direct Supabase call
+      const { data, error } = await supabase
+        .from('books')
+        .select('id')
+        .eq('isbn', isbn)
+        .limit(1);
+      if (error) return false;
+      return data && data.length > 0;
     }
-    
-    return data && data.length > 0;
+    const json = await res.json();
+    return json.isDuplicate === true;
   } catch (err) {
     console.error('Error checking duplicate:', err);
     return false;
@@ -96,22 +99,28 @@ export async function checkIfDuplicate(isbn: string): Promise<boolean> {
 
 /**
  * Add a new book to the library
+ * Uses server-side API to avoid client-side CORS/RLS "Failed to fetch" errors
  */
 export async function addBook(book: BookInsert): Promise<Book | null> {
   try {
-    const { data, error } = await supabase
-      .from('books')
-      .insert([book])
-      .select()
-      .single();
+    const res = await fetch('/api/books', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(book),
+    });
 
-    if (error) {
-      console.error('Error adding book:', error.message);
-      throw error;
+    const json = await res.json();
+
+    if (!res.ok) {
+      throw new Error(json.error || `Server error (${res.status})`);
     }
     
-    return data;
-  } catch (err) {
+    return json.book;
+  } catch (err: any) {
+    // If it's a network error, provide a clearer message
+    if (err instanceof TypeError && err.message === 'Failed to fetch') {
+      throw new Error('Network error – please check your internet connection and try again.');
+    }
     console.error('Error adding book:', err);
     throw err;
   }

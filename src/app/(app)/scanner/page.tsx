@@ -62,22 +62,58 @@ export default function ScannerPage() {
           
           try {
             const isDup = await checkIfDuplicate(decodedText);
-            const response = await fetch(`https://openlibrary.org/api/books?bibkeys=ISBN:${decodedText}&format=json&jscmd=data`);
-            const data = await response.json();
-            const bookKey = `ISBN:${decodedText}`;
-            
-            if (data[bookKey]) {
-              const bookInfo = data[bookKey];
+            let title = "";
+            let author = "";
+            let coverUrl: string | undefined;
+            let found = false;
+
+            // 1️⃣ Try OpenLibrary first
+            try {
+              const olRes = await fetch(`https://openlibrary.org/api/books?bibkeys=ISBN:${decodedText}&format=json&jscmd=data`);
+              const olData = await olRes.json();
+              const bookKey = `ISBN:${decodedText}`;
+              if (olData[bookKey]) {
+                const info = olData[bookKey];
+                title = info.title;
+                author = info.authors?.[0]?.name || "Unknown Author";
+                coverUrl = info.cover?.large || info.cover?.medium || undefined;
+                found = true;
+              }
+            } catch (olErr) {
+              console.warn("OpenLibrary lookup failed, trying fallback...", olErr);
+            }
+
+            // 2️⃣ Fallback: Google Books API
+            if (!found) {
+              try {
+                const gbRes = await fetch(`https://www.googleapis.com/books/v1/volumes?q=isbn:${decodedText}`);
+                const gbData = await gbRes.json();
+                if (gbData.totalItems > 0 && gbData.items?.[0]?.volumeInfo) {
+                  const vol = gbData.items[0].volumeInfo;
+                  title = vol.title || "";
+                  author = vol.authors?.[0] || "Unknown Author";
+                  coverUrl = vol.imageLinks?.thumbnail?.replace("http:", "https:") || undefined;
+                  found = true;
+                }
+              } catch (gbErr) {
+                console.warn("Google Books lookup also failed.", gbErr);
+              }
+            }
+
+            if (found) {
               setBookData({
-                title: bookInfo.title,
-                author: bookInfo.authors?.[0]?.name || "Unknown Author",
+                title,
+                author,
                 isbn: decodedText,
-                coverUrl: bookInfo.cover?.large || bookInfo.cover?.medium || undefined,
+                coverUrl,
                 shelf: "Recently Scanned"
               });
               setScanResult(isDup ? "duplicate" : "new");
             } else {
-              throw new Error("Book not found in OpenLibrary database.");
+              // 3️⃣ Neither API found it — open manual entry pre-filled with ISBN
+              setScanResult(null);
+              setManualForm(prev => ({ ...prev, isbn: decodedText }));
+              setIsManualModalOpen(true);
             }
           } catch (err: any) {
             setError(err.message || "Failed to fetch book data.");
@@ -113,7 +149,9 @@ export default function ScannerPage() {
       setScanResult("saved");
     } catch (err: any) {
       console.error("Scanner Save Error:", err);
-      setError(`Failed: ${err.message || JSON.stringify(err)}`);
+      // Clear scan result so error overlay doesn't overlap with book panel
+      setScanResult(null);
+      setError(err.message || "Failed to save book. Please try again.");
     } finally {
       setIsSaving(false);
     }
