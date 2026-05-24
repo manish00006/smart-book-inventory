@@ -139,6 +139,28 @@ export default function ScannerPage() {
     };
   }, [isScanning, isManualModalOpen]);
 
+  // Client-side Google Books lookup (bypasses server timeout issues)
+  const lookupGoogleBooks = async (query: string) => {
+    try {
+      const res = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(query)}&maxResults=1`);
+      const data = await res.json();
+      if (data.totalItems > 0 && data.items?.[0]?.volumeInfo) {
+        const vol = data.items[0].volumeInfo;
+        const isbn13 = vol.industryIdentifiers?.find((id: any) => id.type === 'ISBN_13')?.identifier || '';
+        const isbn10 = vol.industryIdentifiers?.find((id: any) => id.type === 'ISBN_10')?.identifier || '';
+        return {
+          title: vol.title || '',
+          author: vol.authors?.[0] || '',
+          isbn: isbn13 || isbn10 || '',
+          coverUrl: vol.imageLinks?.thumbnail?.replace('http:', 'https:') || '',
+        };
+      }
+    } catch (e) {
+      console.warn('Client Google Books lookup failed:', e);
+    }
+    return null;
+  };
+
   // Handle photo capture from camera or file picker
   const handlePhotoCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -158,17 +180,49 @@ export default function ScannerPage() {
       setIsExtracting(true);
 
       try {
-        // 🧠 Step 1: AI Vision extracts book info + database enrichment
-        const res = await fetch("/api/extract-book", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ image: base64 }),
-        });
-        const json = await res.json();
+        // 🧠 Step 1: Send to AI Vision API
+        let bookInfo = { title: '', author: '', isbn: '', coverUrl: '' };
+        
+        try {
+          const res = await fetch("/api/extract-book", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ image: base64 }),
+          });
+          if (res.ok) {
+            const json = await res.json();
+            bookInfo = {
+              title: json.title || '',
+              author: json.author || '',
+              isbn: json.isbn || '',
+              coverUrl: json.coverUrl || '',
+            };
+          }
+        } catch (apiErr) {
+          console.warn("Server API failed:", apiErr);
+        }
 
-        if (res.ok && json.title) {
-          // 📤 Step 2: Upload the cover photo
-          let coverUrl = json.coverUrl || null;
+        // 🔍 Step 2: Client-side fallback if server didn't get title
+        if (!bookInfo.title && bookInfo.isbn) {
+          console.log("Server returned ISBN but no title, trying client-side lookup...");
+          // Try exact ISBN
+          const gb1 = await lookupGoogleBooks(`isbn:${bookInfo.isbn}`);
+          if (gb1?.title) {
+            bookInfo = { ...bookInfo, title: gb1.title, author: gb1.author || bookInfo.author, coverUrl: gb1.coverUrl || bookInfo.coverUrl, isbn: gb1.isbn || bookInfo.isbn };
+          }
+          // Try fuzzy ISBN search
+          if (!bookInfo.title) {
+            const gb2 = await lookupGoogleBooks(bookInfo.isbn);
+            if (gb2?.title) {
+              bookInfo = { ...bookInfo, title: gb2.title, author: gb2.author || bookInfo.author, coverUrl: gb2.coverUrl || bookInfo.coverUrl, isbn: gb2.isbn || bookInfo.isbn };
+            }
+          }
+        }
+
+        // If we have a title now → auto-save
+        if (bookInfo.title) {
+          // Upload cover photo if no database cover exists
+          let coverUrl = bookInfo.coverUrl || null;
           if (!coverUrl && file) {
             const formData = new FormData();
             formData.append("file", file);
@@ -177,18 +231,18 @@ export default function ScannerPage() {
               const uploadJson = await uploadRes.json();
               if (uploadRes.ok) coverUrl = uploadJson.url;
             } catch (uploadErr) {
-              console.warn("Cover upload failed, using database cover:", uploadErr);
+              console.warn("Cover upload failed:", uploadErr);
             }
           }
 
-          // 🔍 Step 3: Check for duplicates
-          const isDup = json.isbn ? await checkIfDuplicate(json.isbn) : false;
+          // Check for duplicates
+          const isDup = bookInfo.isbn ? await checkIfDuplicate(bookInfo.isbn) : false;
 
           if (isDup) {
             setBookData({
-              title: json.title,
-              author: json.author || "Unknown Author",
-              isbn: json.isbn || "",
+              title: bookInfo.title,
+              author: bookInfo.author || "Unknown Author",
+              isbn: bookInfo.isbn,
               coverUrl: coverUrl || undefined,
             });
             setScanResult("duplicate");
@@ -196,11 +250,11 @@ export default function ScannerPage() {
             return;
           }
 
-          // 💾 Step 4: Auto-save to library
+          // 💾 Auto-save to library
           const newBook: BookInsert = {
-            title: json.title,
-            author: json.author || "Unknown Author",
-            isbn: json.isbn || null,
+            title: bookInfo.title,
+            author: bookInfo.author || "Unknown Author",
+            isbn: bookInfo.isbn || null,
             cover_url: coverUrl,
             shelf: "Recently Scanned",
             status: "Not Read",
@@ -208,25 +262,25 @@ export default function ScannerPage() {
           await addBook(newBook);
 
           setBookData({
-            title: json.title,
-            author: json.author || "Unknown Author",
-            isbn: json.isbn || "",
+            title: bookInfo.title,
+            author: bookInfo.author || "Unknown Author",
+            isbn: bookInfo.isbn,
             coverUrl: coverUrl || undefined,
           });
           setScanResult("saved");
         } else {
-          // AI couldn't extract title — fall back to manual entry
+          // Still no title — fall back to manual entry
           setScanResult(null);
           setManualForm(prev => ({
             ...prev,
-            title: json.title || prev.title,
-            author: json.author || prev.author,
-            isbn: json.isbn || prev.isbn,
+            title: bookInfo.title || prev.title,
+            author: bookInfo.author || prev.author,
+            isbn: bookInfo.isbn || prev.isbn,
           }));
           setIsManualModalOpen(true);
         }
       } catch (err) {
-        console.warn("AI extraction failed, opening manual entry:", err);
+        console.warn("Extraction failed, opening manual entry:", err);
         setScanResult(null);
         setIsManualModalOpen(true);
       } finally {
