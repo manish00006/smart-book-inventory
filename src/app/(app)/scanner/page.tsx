@@ -152,30 +152,83 @@ export default function ScannerPage() {
       const base64 = ev.target?.result as string;
       setCapturedPhoto(base64);
 
-      // Auto-open manual entry modal
-      if (!isManualModalOpen) {
-        setIsManualModalOpen(true);
-      }
-
-      // 🧠 AI Vision: Extract book info from the photo
+      // Show loading state on the scanner area
+      setIsScanning(false);
+      setScanResult("loading");
       setIsExtracting(true);
+
       try {
+        // 🧠 Step 1: AI Vision extracts book info + database enrichment
         const res = await fetch("/api/extract-book", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ image: base64 }),
         });
         const json = await res.json();
-        if (res.ok && (json.title || json.author)) {
+
+        if (res.ok && json.title) {
+          // 📤 Step 2: Upload the cover photo
+          let coverUrl = json.coverUrl || null;
+          if (!coverUrl && file) {
+            const formData = new FormData();
+            formData.append("file", file);
+            try {
+              const uploadRes = await fetch("/api/upload", { method: "POST", body: formData });
+              const uploadJson = await uploadRes.json();
+              if (uploadRes.ok) coverUrl = uploadJson.url;
+            } catch (uploadErr) {
+              console.warn("Cover upload failed, using database cover:", uploadErr);
+            }
+          }
+
+          // 🔍 Step 3: Check for duplicates
+          const isDup = json.isbn ? await checkIfDuplicate(json.isbn) : false;
+
+          if (isDup) {
+            setBookData({
+              title: json.title,
+              author: json.author || "Unknown Author",
+              isbn: json.isbn || "",
+              coverUrl: coverUrl || undefined,
+            });
+            setScanResult("duplicate");
+            setIsExtracting(false);
+            return;
+          }
+
+          // 💾 Step 4: Auto-save to library
+          const newBook: BookInsert = {
+            title: json.title,
+            author: json.author || "Unknown Author",
+            isbn: json.isbn || null,
+            cover_url: coverUrl,
+            shelf: "Recently Scanned",
+            status: "Not Read",
+          };
+          await addBook(newBook);
+
+          setBookData({
+            title: json.title,
+            author: json.author || "Unknown Author",
+            isbn: json.isbn || "",
+            coverUrl: coverUrl || undefined,
+          });
+          setScanResult("saved");
+        } else {
+          // AI couldn't extract title — fall back to manual entry
+          setScanResult(null);
           setManualForm(prev => ({
             ...prev,
             title: json.title || prev.title,
             author: json.author || prev.author,
             isbn: json.isbn || prev.isbn,
           }));
+          setIsManualModalOpen(true);
         }
       } catch (err) {
-        console.warn("AI extraction failed, user can fill manually:", err);
+        console.warn("AI extraction failed, opening manual entry:", err);
+        setScanResult(null);
+        setIsManualModalOpen(true);
       } finally {
         setIsExtracting(false);
       }
@@ -341,8 +394,18 @@ export default function ScannerPage() {
 
         {scanResult === 'loading' && (
           <div className="absolute inset-0 bg-black/80 flex flex-col items-center justify-center z-20">
-            <Loader2 className="w-10 h-10 text-amber-500 animate-spin mb-4" />
-            <p className="text-white/70 animate-pulse">Fetching book details...</p>
+            {isExtracting ? (
+              <>
+                <Sparkles className="w-10 h-10 text-amber-500 animate-pulse mb-4" />
+                <p className="text-white/70 animate-pulse font-medium">AI analyzing your photo...</p>
+                <p className="text-white/40 text-xs mt-2">Extracting title, author & saving</p>
+              </>
+            ) : (
+              <>
+                <Loader2 className="w-10 h-10 text-amber-500 animate-spin mb-4" />
+                <p className="text-white/70 animate-pulse">Fetching book details...</p>
+              </>
+            )}
           </div>
         )}
 
