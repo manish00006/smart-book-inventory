@@ -151,6 +151,11 @@ export default function ScannerPage() {
       setCapturedPhoto(ev.target?.result as string);
     };
     reader.readAsDataURL(file);
+
+    // Auto-open manual entry modal so user can fill in book details alongside the photo
+    if (!isManualModalOpen) {
+      setIsManualModalOpen(true);
+    }
   };
 
   const removePhoto = () => {
@@ -377,21 +382,44 @@ export default function ScannerPage() {
         </AnimatePresence>
       </div>
       
-      <div className="flex gap-4 mt-8 z-40 relative">
+      <div className="flex flex-col gap-3 mt-8 z-40 relative w-full max-w-md px-4">
+        {/* Primary row: Two big photo buttons */}
+        <div className="flex gap-3">
+          <button 
+            onClick={() => {
+              if (fileInputRef.current) {
+                fileInputRef.current.setAttribute("capture", "environment");
+                fileInputRef.current.click();
+              }
+            }}
+            className="flex-1 flex items-center justify-center gap-2 px-4 py-4 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-bold rounded-2xl transition-all shadow-lg shadow-amber-500/30"
+          >
+            <Camera className="w-5 h-5" />
+            Snap Cover
+          </button>
+          <button 
+            onClick={() => {
+              if (fileInputRef.current) {
+                fileInputRef.current.removeAttribute("capture");
+                fileInputRef.current.click();
+              }
+            }}
+            className="flex-1 flex items-center justify-center gap-2 px-4 py-4 bg-gradient-to-r from-purple-500 to-violet-500 hover:from-purple-600 hover:to-violet-600 text-white font-bold rounded-2xl transition-all shadow-lg shadow-purple-500/30"
+          >
+            <ImagePlus className="w-5 h-5" />
+            Gallery
+          </button>
+        </div>
+        {/* Secondary row: Manual Entry */}
         <button 
           onClick={(e) => {
-            console.log("Manual Entry clicked");
             e.stopPropagation();
             setIsManualModalOpen(true);
           }}
-          className="flex items-center gap-2 px-6 py-4 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-full transition-all shadow-lg shadow-amber-500/20 scale-105"
+          className="flex items-center justify-center gap-2 w-full px-6 py-3 bg-white/5 border border-white/10 hover:bg-white/10 rounded-2xl text-white font-medium transition-colors backdrop-blur-md"
         >
-          <Database className="w-5 h-5" />
+          <Database className="w-4 h-4" />
           Manual Entry
-        </button>
-        <button className="flex items-center gap-2 px-6 py-4 bg-white/5 border border-white/10 hover:bg-white/10 rounded-full text-white font-medium transition-colors backdrop-blur-md">
-          <ScanBarcode className="w-4 h-4" />
-          OCR Mode
         </button>
       </div>
 
