@@ -14,21 +14,17 @@ export type Book = {
 export type BookInsert = Omit<Book, 'id' | 'added_at'>;
 
 /**
- * Fetch recently added books
+ * Fetch recently added books via server API
  */
 export async function getRecentBooks(limit = 10): Promise<Book[]> {
   try {
-    const { data, error } = await supabase
-      .from('books')
-      .select('*')
-      .order('added_at', { ascending: false })
-      .limit(limit);
-
-    if (error) {
-      console.error('Supabase error fetching recent books:', error.message);
+    const res = await fetch(`/api/books?limit=${limit}`);
+    if (!res.ok) {
+      console.error('API error fetching recent books:', res.statusText);
       return [];
     }
-    return data || [];
+    const json = await res.json();
+    return json.books || [];
   } catch (err) {
     console.error('Error fetching recent books:', err);
     return [];
@@ -36,36 +32,26 @@ export async function getRecentBooks(limit = 10): Promise<Book[]> {
 }
 
 /**
- * Fetch library statistics
+ * Fetch library statistics via server API
  */
 export async function getLibraryStats() {
   try {
-    // 1. Total Books
-    const { count: totalBooks, error: totalError } = await supabase
-      .from('books')
-      .select('*', { count: 'exact', head: true });
-
-    // 2. Books Read
-    const { count: booksRead, error: readError } = await supabase
-      .from('books')
-      .select('*', { count: 'exact', head: true })
-      .eq('status', 'Read');
-
-    // Return safely even if it fails
+    const res = await fetch('/api/books?limit=500');
+    if (!res.ok) {
+      return { totalBooks: 0, booksRead: 0, duplicateAlerts: 0, readingTimeHours: 0 };
+    }
+    const json = await res.json();
+    const allBooks = json.books || [];
+    const booksRead = allBooks.filter((b: Book) => b.status === 'Read').length;
     return {
-      totalBooks: totalBooks || 0,
-      booksRead: booksRead || 0,
-      duplicateAlerts: 0, // This could be tracked if we add a table for scan logs
-      readingTimeHours: Math.round((booksRead || 0) * 5.5), // Mock estimation for demo
+      totalBooks: allBooks.length,
+      booksRead,
+      duplicateAlerts: 0,
+      readingTimeHours: Math.round(booksRead * 5.5),
     };
   } catch (err) {
     console.error('Error fetching stats:', err);
-    return {
-      totalBooks: 0,
-      booksRead: 0,
-      duplicateAlerts: 0,
-      readingTimeHours: 0,
-    };
+    return { totalBooks: 0, booksRead: 0, duplicateAlerts: 0, readingTimeHours: 0 };
   }
 }
 
@@ -131,26 +117,18 @@ export async function addBook(book: BookInsert): Promise<Book | null> {
  */
 export async function searchBooks(query: string, statusFilter?: string): Promise<Book[]> {
   try {
-    let q = supabase
-      .from('books')
-      .select('*');
+    const params = new URLSearchParams();
+    if (query) params.set('q', query);
+    if (statusFilter && statusFilter !== 'All') params.set('status', statusFilter);
+    params.set('limit', '500');
 
-    if (query) {
-      // Simple text search across title, author, and isbn
-      q = q.or(`title.ilike.%${query}%,author.ilike.%${query}%,isbn.ilike.%${query}%`);
-    }
-
-    if (statusFilter && statusFilter !== 'All') {
-      q = q.eq('status', statusFilter);
-    }
-
-    const { data, error } = await q.order('added_at', { ascending: false });
-
-    if (error) {
-      console.error('Error searching books:', error.message);
+    const res = await fetch(`/api/books?${params.toString()}`);
+    if (!res.ok) {
+      console.error('API error searching books:', res.statusText);
       return [];
     }
-    return data || [];
+    const json = await res.json();
+    return json.books || [];
   } catch (err) {
     console.error('Error in searchBooks:', err);
     return [];
