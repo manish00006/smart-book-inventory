@@ -107,3 +107,59 @@ export async function GET(request: NextRequest) {
     );
   }
 }
+
+// DELETE /api/books — Delete a book by id
+export async function DELETE(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get('id');
+
+    if (!id) {
+      return NextResponse.json({ error: 'Book ID is required.' }, { status: 400 });
+    }
+
+    const { error } = await supabase
+      .from('books')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      console.error('Supabase delete error:', error);
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    return NextResponse.json({ success: true });
+  } catch (err: any) {
+    console.error('API /books DELETE error:', err);
+    return NextResponse.json({ error: err.message || 'Internal server error.' }, { status: 500 });
+  }
+}
+
+// PATCH /api/books — Update a book by id
+export async function PATCH(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { id, ...updates } = body;
+
+    if (!id) {
+      return NextResponse.json({ error: 'Book ID is required.' }, { status: 400 });
+    }
+
+    const { data, error } = await supabase
+      .from('books')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Supabase update error:', error);
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    return NextResponse.json({ book: data });
+  } catch (err: any) {
+    console.error('API /books PATCH error:', err);
+    return NextResponse.json({ error: err.message || 'Internal server error.' }, { status: 500 });
+  }
+}

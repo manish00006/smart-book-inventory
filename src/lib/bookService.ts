@@ -146,18 +146,19 @@ export async function searchBooks(query: string, statusFilter?: string): Promise
  */
 export async function updateBook(id: string, updates: Partial<BookInsert>): Promise<Book | null> {
   try {
-    const { data, error } = await supabase
-      .from('books')
-      .update(updates)
-      .eq('id', id)
-      .select()
-      .single();
+    const res = await fetch('/api/books', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, ...updates }),
+    });
 
-    if (error) {
-      console.error('Error updating book:', error.message);
+    if (!res.ok) {
+      const json = await res.json();
+      console.error('Error updating book:', json.error);
       return null;
     }
-    return data;
+    const json = await res.json();
+    return json.book;
   } catch (err) {
     console.error('Error in updateBook:', err);
     return null;
@@ -169,13 +170,13 @@ export async function updateBook(id: string, updates: Partial<BookInsert>): Prom
  */
 export async function deleteBook(id: string): Promise<boolean> {
   try {
-    const { error } = await supabase
-      .from('books')
-      .delete()
-      .eq('id', id);
+    const res = await fetch(`/api/books?id=${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    });
 
-    if (error) {
-      console.error('Error deleting book:', error.message);
+    if (!res.ok) {
+      const json = await res.json();
+      console.error('Error deleting book:', json.error);
       return false;
     }
     return true;
@@ -184,4 +185,5 @@ export async function deleteBook(id: string): Promise<boolean> {
     return false;
   }
 }
+
 
