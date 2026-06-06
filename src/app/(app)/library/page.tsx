@@ -18,7 +18,9 @@ import {
   Tag,
   Library,
   User,
-  Hash
+  Hash,
+  Pencil,
+  Save
 } from "lucide-react";
 import { searchBooks, updateBook, deleteBook, Book } from "@/lib/bookService";
 
@@ -56,6 +58,11 @@ export default function LibraryPage() {
   const [bookSummary, setBookSummary] = useState<string | null>(null);
   const [isSummaryLoading, setIsSummaryLoading] = useState(false);
   const [summaryError, setSummaryError] = useState<string | null>(null);
+
+  // Edit state
+  const [isEditing, setIsEditing] = useState(false);
+  const [editForm, setEditForm] = useState({ title: '', author: '', isbn: '' });
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
 
   const loadBooks = async () => {
     setIsLoading(true);
@@ -138,6 +145,32 @@ export default function LibraryPage() {
 
   const openBookDetail = (book: Book) => {
     setDetailBook(book);
+    setIsEditing(false);
+  };
+
+  const startEditing = () => {
+    if (!detailBook) return;
+    setEditForm({ title: detailBook.title, author: detailBook.author, isbn: detailBook.isbn || '' });
+    setIsEditing(true);
+  };
+
+  const saveEdit = async () => {
+    if (!detailBook) return;
+    setIsSavingEdit(true);
+    const updated = await updateBook(detailBook.id, {
+      title: editForm.title,
+      author: editForm.author,
+      isbn: editForm.isbn || null,
+    } as any);
+    if (updated) {
+      setBooks(books.map(b => b.id === detailBook.id ? { ...b, title: editForm.title, author: editForm.author, isbn: editForm.isbn || null } : b));
+      setDetailBook({ ...detailBook, title: editForm.title, author: editForm.author, isbn: editForm.isbn || null });
+      setToast({ message: 'Book updated!', type: 'success' });
+    } else {
+      setToast({ message: 'Failed to update', type: 'error' });
+    }
+    setIsEditing(false);
+    setIsSavingEdit(false);
   };
 
   const toggleBookSelect = (bookId: string) => {
@@ -258,11 +291,39 @@ export default function LibraryPage() {
                   
                   {/* Book info */}
                   <div className="flex-1 min-w-0 pt-1">
-                    <h2 className="text-xl font-outfit font-bold text-white leading-tight mb-1.5 line-clamp-3">{detailBook.title}</h2>
-                    <p className="text-white/60 text-sm mb-4 flex items-center gap-1.5">
-                      <User className="w-3.5 h-3.5 flex-shrink-0" />
-                      {detailBook.author}
-                    </p>
+                    {isEditing ? (
+                      <div className="space-y-2">
+                        <input
+                          type="text"
+                          value={editForm.title}
+                          onChange={e => setEditForm({...editForm, title: e.target.value})}
+                          className="w-full bg-white/10 border border-amber-500/40 rounded-lg px-3 py-1.5 text-white text-sm font-bold focus:outline-none focus:border-amber-500"
+                          placeholder="Book title"
+                        />
+                        <input
+                          type="text"
+                          value={editForm.author}
+                          onChange={e => setEditForm({...editForm, author: e.target.value})}
+                          className="w-full bg-white/10 border border-white/20 rounded-lg px-3 py-1.5 text-white/80 text-sm focus:outline-none focus:border-amber-500/50"
+                          placeholder="Author name"
+                        />
+                        <input
+                          type="text"
+                          value={editForm.isbn}
+                          onChange={e => setEditForm({...editForm, isbn: e.target.value})}
+                          className="w-full bg-white/10 border border-white/20 rounded-lg px-3 py-1.5 text-white/80 text-xs focus:outline-none focus:border-amber-500/50"
+                          placeholder="ISBN (optional)"
+                        />
+                      </div>
+                    ) : (
+                      <>
+                        <h2 className="text-xl font-outfit font-bold text-white leading-tight mb-1.5 line-clamp-3">{detailBook.title}</h2>
+                        <p className="text-white/60 text-sm mb-4 flex items-center gap-1.5">
+                          <User className="w-3.5 h-3.5 flex-shrink-0" />
+                          {detailBook.author}
+                        </p>
+                      </>
+                    )}
                     
                     {/* Status badge */}
                     <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold border ${getStatusStyle(detailBook.status).bg} ${getStatusStyle(detailBook.status).border} ${getStatusStyle(detailBook.status).text}`}>
@@ -334,6 +395,36 @@ export default function LibraryPage() {
                       </button>
                     ))}
                   </div>
+                </div>
+
+                {/* Edit / Save buttons */}
+                <div className="flex gap-2 mb-3">
+                  {isEditing ? (
+                    <>
+                      <button 
+                        onClick={saveEdit}
+                        disabled={isSavingEdit || !editForm.title.trim()}
+                        className="flex-1 py-3 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white rounded-xl flex items-center justify-center gap-2 text-sm font-medium transition-all"
+                      >
+                        {isSavingEdit ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                        Save Changes
+                      </button>
+                      <button 
+                        onClick={() => setIsEditing(false)}
+                        className="px-5 py-3 bg-white/5 hover:bg-white/10 border border-white/10 text-white/60 rounded-xl text-sm font-medium transition-all"
+                      >
+                        Cancel
+                      </button>
+                    </>
+                  ) : (
+                    <button 
+                      onClick={startEditing}
+                      className="flex-1 py-3 bg-white/5 hover:bg-white/10 border border-white/10 text-white/70 hover:text-white rounded-xl flex items-center justify-center gap-2 text-sm font-medium transition-all"
+                    >
+                      <Pencil className="w-4 h-4" />
+                      Edit Book Info
+                    </button>
+                  )}
                 </div>
 
                 {/* Delete button */}
