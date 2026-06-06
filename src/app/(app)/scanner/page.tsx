@@ -22,7 +22,8 @@ export default function ScannerPage() {
     title: "",
     author: "",
     isbn: "",
-    shelf: "Main Shelf"
+    shelf: "Main Shelf",
+    coverUrl: ""
   });
 
   // Photo capture state
@@ -262,7 +263,7 @@ export default function ScannerPage() {
           }
         }
 
-        // If we have a title now → auto-save
+        // If we have a title now → let user review & edit before saving
         if (bookInfo.title) {
           // Upload cover photo if no database cover exists
           let coverUrl = bookInfo.coverUrl || null;
@@ -296,26 +297,18 @@ export default function ScannerPage() {
             return;
           }
 
-          // 💾 Auto-save to library
-          const newBook: BookInsert = {
+          // 📝 Show manual form pre-filled with AI data for user to review/edit
+          setManualForm(prev => ({
+            ...prev,
             title: bookInfo.title,
-            author: bookInfo.author || "Unknown Author",
-            isbn: bookInfo.isbn || null,
-            cover_url: coverUrl,
-            shelf: "Recently Scanned",
-            status: "Not Read",
-          };
-          await addBook(newBook);
-
-          setBookData({
-            title: bookInfo.title,
-            author: bookInfo.author || "Unknown Author",
-            isbn: bookInfo.isbn,
-            coverUrl: coverUrl || undefined,
-          });
-          setScanResult("saved");
+            author: bookInfo.author || '',
+            isbn: bookInfo.isbn || '',
+            coverUrl: coverUrl || '',
+          }));
+          setScanResult(null);
+          setIsManualModalOpen(true);
         } else {
-          // Still no title — fall back to manual entry
+          // No title found — open empty manual entry
           setScanResult(null);
           setManualForm(prev => ({
             ...prev,
@@ -403,7 +396,7 @@ export default function ScannerPage() {
     setIsSaving(true);
     setError(null);
     try {
-      // Check for duplicate by ISBN if provided
+      // Check for duplicate by ISBN or title
       if (manualForm.isbn) {
         const isDup = await checkIfDuplicate(manualForm.isbn);
         if (isDup) {
@@ -415,10 +408,21 @@ export default function ScannerPage() {
           return;
         }
       }
+      if (manualForm.title) {
+        const isDupTitle = await checkIfDuplicateByTitle(manualForm.title);
+        if (isDupTitle) {
+          setIsManualModalOpen(false);
+          setBookData({ title: manualForm.title, author: manualForm.author, isbn: manualForm.isbn });
+          setScanResult("duplicate");
+          setIsScanning(false);
+          setIsSaving(false);
+          return;
+        }
+      }
 
-      // Upload photo if captured
-      let coverUrl: string | null = null;
-      if (capturedFile) {
+      // Upload photo if captured, or use AI cover
+      let coverUrl: string | null = manualForm.coverUrl || null;
+      if (!coverUrl && capturedFile) {
         coverUrl = await uploadPhoto();
       }
 
@@ -432,7 +436,7 @@ export default function ScannerPage() {
       };
       await addBook(newBook);
       setIsManualModalOpen(false);
-      setManualForm({ title: "", author: "", isbn: "", shelf: "Main Shelf" });
+      setManualForm({ title: "", author: "", isbn: "", shelf: "Main Shelf", coverUrl: "" });
       setCapturedPhoto(null);
       setCapturedFile(null);
       setBookData({ title: newBook.title, author: newBook.author, isbn: newBook.isbn || "", coverUrl: coverUrl || undefined });
