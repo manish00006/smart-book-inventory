@@ -265,20 +265,6 @@ export default function ScannerPage() {
 
         // If we have a title now → let user review & edit before saving
         if (bookInfo.title) {
-          // Upload cover photo if no database cover exists
-          let coverUrl = bookInfo.coverUrl || null;
-          if (!coverUrl && file) {
-            const formData = new FormData();
-            formData.append("file", file);
-            try {
-              const uploadRes = await fetch("/api/upload", { method: "POST", body: formData });
-              const uploadJson = await uploadRes.json();
-              if (uploadRes.ok) coverUrl = uploadJson.url;
-            } catch (uploadErr) {
-              console.warn("Cover upload failed:", uploadErr);
-            }
-          }
-
           // Check for duplicates by ISBN AND title
           let isDup = bookInfo.isbn ? await checkIfDuplicate(bookInfo.isbn) : false;
           if (!isDup && bookInfo.title) {
@@ -290,7 +276,7 @@ export default function ScannerPage() {
               title: bookInfo.title,
               author: bookInfo.author || "Unknown Author",
               isbn: bookInfo.isbn,
-              coverUrl: coverUrl || undefined,
+              coverUrl: bookInfo.coverUrl || undefined,
             });
             setScanResult("duplicate");
             setIsExtracting(false);
@@ -298,12 +284,13 @@ export default function ScannerPage() {
           }
 
           // 📝 Show manual form pre-filled with AI data for user to review/edit
+          // Cover will be uploaded when user submits the form
           setManualForm(prev => ({
             ...prev,
             title: bookInfo.title,
             author: bookInfo.author || '',
             isbn: bookInfo.isbn || '',
-            coverUrl: coverUrl || '',
+            coverUrl: bookInfo.coverUrl || '',
           }));
           setScanResult(null);
           setIsManualModalOpen(true);
@@ -337,14 +324,35 @@ export default function ScannerPage() {
     }
   };
 
-  // Upload photo to server
+  // Upload photo to server (compresses first for reliability)
   const uploadPhoto = async (): Promise<string | null> => {
-    if (!capturedFile) return null;
+    if (!capturedPhoto && !capturedFile) return null;
 
     setIsUploading(true);
     try {
+      // Compress the photo to a small JPEG blob for reliable upload
+      const blob = await new Promise<Blob>((resolve) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let w = img.width;
+          let h = img.height;
+          const maxW = 600;
+          if (w > maxW) {
+            h = (h * maxW) / w;
+            w = maxW;
+          }
+          canvas.width = w;
+          canvas.height = h;
+          const ctx = canvas.getContext('2d');
+          ctx?.drawImage(img, 0, 0, w, h);
+          canvas.toBlob((b) => resolve(b || new Blob()), 'image/jpeg', 0.75);
+        };
+        img.src = capturedPhoto || '';
+      });
+
       const formData = new FormData();
-      formData.append("file", capturedFile);
+      formData.append("file", new File([blob], `cover_${Date.now()}.jpg`, { type: 'image/jpeg' }));
 
       const res = await fetch("/api/upload", {
         method: "POST",
@@ -355,10 +363,11 @@ export default function ScannerPage() {
       if (!res.ok) {
         throw new Error(json.error || "Upload failed");
       }
+      console.log("Cover uploaded:", json.url);
       return json.url;
     } catch (err: any) {
       console.error("Photo upload error:", err);
-      // If upload fails, convert to base64 data URL as fallback
+      // Fallback: use the base64 photo directly as cover URL
       return capturedPhoto;
     } finally {
       setIsUploading(false);
@@ -420,9 +429,9 @@ export default function ScannerPage() {
         }
       }
 
-      // Upload photo if captured, or use AI cover
+      // Upload snap photo as cover, or use AI cover URL
       let coverUrl: string | null = manualForm.coverUrl || null;
-      if (!coverUrl && capturedFile) {
+      if (!coverUrl && (capturedPhoto || capturedFile)) {
         coverUrl = await uploadPhoto();
       }
 
