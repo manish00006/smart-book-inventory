@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ScanBarcode, AlertTriangle, BookCheck, Database, Loader2, CheckCircle2, X, BookOpen, User, Hash, Library, Camera, ImagePlus, Trash2, Sparkles } from "lucide-react";
 import { Html5QrcodeScanner, Html5QrcodeSupportedFormats } from "html5-qrcode";
-import { checkIfDuplicate, addBook, BookInsert } from "@/lib/bookService";
+import { checkIfDuplicate, checkIfDuplicateByTitle, addBook, BookInsert } from "@/lib/bookService";
 
 type ScanResult = "duplicate" | "new" | "loading" | "saved" | null;
 type BookData = { title: string; author: string; isbn: string; coverUrl?: string; shelf?: string } | null;
@@ -278,8 +278,11 @@ export default function ScannerPage() {
             }
           }
 
-          // Check for duplicates
-          const isDup = bookInfo.isbn ? await checkIfDuplicate(bookInfo.isbn) : false;
+          // Check for duplicates by ISBN AND title
+          let isDup = bookInfo.isbn ? await checkIfDuplicate(bookInfo.isbn) : false;
+          if (!isDup && bookInfo.title) {
+            isDup = await checkIfDuplicateByTitle(bookInfo.title);
+          }
 
           if (isDup) {
             setBookData({

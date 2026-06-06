@@ -57,28 +57,34 @@ export async function getLibraryStats() {
 
 /**
  * Check if an ISBN already exists in the library
- * Uses server-side API to avoid client-side CORS/RLS issues
  */
 export async function checkIfDuplicate(isbn: string): Promise<boolean> {
   if (!isbn) return false;
   
   try {
     const res = await fetch(`/api/books?isbn=${encodeURIComponent(isbn)}`);
-    if (!res.ok) {
-      console.error('API error checking duplicate:', res.statusText);
-      // Fallback to direct Supabase call
-      const { data, error } = await supabase
-        .from('books')
-        .select('id')
-        .eq('isbn', isbn)
-        .limit(1);
-      if (error) return false;
-      return data && data.length > 0;
-    }
+    if (!res.ok) return false;
     const json = await res.json();
     return json.isDuplicate === true;
   } catch (err) {
-    console.error('Error checking duplicate:', err);
+    console.error('Error checking duplicate by ISBN:', err);
+    return false;
+  }
+}
+
+/**
+ * Check if a book title already exists in the library (case-insensitive)
+ */
+export async function checkIfDuplicateByTitle(title: string): Promise<boolean> {
+  if (!title) return false;
+  
+  try {
+    const res = await fetch(`/api/books?dupTitle=${encodeURIComponent(title)}`);
+    if (!res.ok) return false;
+    const json = await res.json();
+    return json.isDuplicate === true;
+  } catch (err) {
+    console.error('Error checking duplicate by title:', err);
     return false;
   }
 }

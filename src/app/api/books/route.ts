@@ -53,12 +53,27 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '50', 10);
     const isbn = searchParams.get('isbn') || '';
 
-    // If isbn param is passed, check for duplicate
+    // If isbn param is passed, check for duplicate by ISBN
     if (isbn) {
       const { data, error } = await supabase
         .from('books')
         .select('id')
         .eq('isbn', isbn)
+        .limit(1);
+
+      if (error) {
+        return NextResponse.json({ error: error.message }, { status: 500 });
+      }
+      return NextResponse.json({ isDuplicate: data && data.length > 0 });
+    }
+
+    // Check duplicate by title (case-insensitive)
+    const dupTitle = searchParams.get('dupTitle') || '';
+    if (dupTitle) {
+      const { data, error } = await supabase
+        .from('books')
+        .select('id')
+        .ilike('title', dupTitle)
         .limit(1);
 
       if (error) {
