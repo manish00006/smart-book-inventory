@@ -7,6 +7,20 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
+/**
+ * Helper to check if a Supabase error is caused by a paused/sleeping database
+ */
+function isSupabasePausedError(err: any): boolean {
+  const msg = (err?.message || err?.toString() || '').toLowerCase();
+  return (
+    msg.includes('fetch failed') ||
+    msg.includes('enotfound') ||
+    msg.includes('getaddrinfo') ||
+    msg.includes('paused') ||
+    msg.includes('unpause')
+  );
+}
+
 // POST /api/books — Add a new book
 export async function POST(request: NextRequest) {
   try {
@@ -28,8 +42,12 @@ export async function POST(request: NextRequest) {
 
     if (error) {
       console.error('Supabase insert error:', error);
+      const isPaused = isSupabasePausedError(error);
       return NextResponse.json(
-        { error: error.message || 'Failed to add book to database.' },
+        { 
+          error: isPaused ? 'Supabase database is paused. Please visit the Supabase Dashboard to unpause it.' : error.message,
+          isPaused
+        },
         { status: 500 }
       );
     }
@@ -37,8 +55,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ book: data }, { status: 201 });
   } catch (err: any) {
     console.error('API /books POST error:', err);
+    const isPaused = isSupabasePausedError(err);
     return NextResponse.json(
-      { error: err.message || 'Internal server error.' },
+      { 
+        error: isPaused ? 'Supabase database is paused. Please visit the Supabase Dashboard to unpause it.' : (err.message || 'Internal server error.'),
+        isPaused
+      },
       { status: 500 }
     );
   }
@@ -62,7 +84,11 @@ export async function GET(request: NextRequest) {
         .limit(1);
 
       if (error) {
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        const isPaused = isSupabasePausedError(error);
+        return NextResponse.json({ 
+          error: isPaused ? 'Supabase database is paused. Please visit the Supabase Dashboard to unpause it.' : error.message,
+          isPaused
+        }, { status: 500 });
       }
       return NextResponse.json({ isDuplicate: data && data.length > 0 });
     }
@@ -77,7 +103,11 @@ export async function GET(request: NextRequest) {
         .limit(1);
 
       if (error) {
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        const isPaused = isSupabasePausedError(error);
+        return NextResponse.json({ 
+          error: isPaused ? 'Supabase database is paused. Please visit the Supabase Dashboard to unpause it.' : error.message,
+          isPaused
+        }, { status: 500 });
       }
       return NextResponse.json({ isDuplicate: data && data.length > 0 });
     }
@@ -95,14 +125,22 @@ export async function GET(request: NextRequest) {
     const { data, error } = await q.order('added_at', { ascending: false }).limit(limit);
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      const isPaused = isSupabasePausedError(error);
+      return NextResponse.json({ 
+        error: isPaused ? 'Supabase database is paused. Please visit the Supabase Dashboard to unpause it.' : error.message,
+        isPaused
+      }, { status: 500 });
     }
 
     return NextResponse.json({ books: data || [] });
   } catch (err: any) {
     console.error('API /books GET error:', err);
+    const isPaused = isSupabasePausedError(err);
     return NextResponse.json(
-      { error: err.message || 'Internal server error.' },
+      { 
+        error: isPaused ? 'Supabase database is paused. Please visit the Supabase Dashboard to unpause it.' : (err.message || 'Internal server error.'),
+        isPaused
+      },
       { status: 500 }
     );
   }
@@ -125,13 +163,24 @@ export async function DELETE(request: NextRequest) {
 
     if (error) {
       console.error('Supabase delete error:', error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      const isPaused = isSupabasePausedError(error);
+      return NextResponse.json({ 
+        error: isPaused ? 'Supabase database is paused. Please visit the Supabase Dashboard to unpause it.' : error.message,
+        isPaused
+      }, { status: 500 });
     }
 
     return NextResponse.json({ success: true });
   } catch (err: any) {
     console.error('API /books DELETE error:', err);
-    return NextResponse.json({ error: err.message || 'Internal server error.' }, { status: 500 });
+    const isPaused = isSupabasePausedError(err);
+    return NextResponse.json(
+      { 
+        error: isPaused ? 'Supabase database is paused. Please visit the Supabase Dashboard to unpause it.' : (err.message || 'Internal server error.'),
+        isPaused
+      },
+      { status: 500 }
+    );
   }
 }
 
@@ -154,12 +203,23 @@ export async function PATCH(request: NextRequest) {
 
     if (error) {
       console.error('Supabase update error:', error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      const isPaused = isSupabasePausedError(error);
+      return NextResponse.json({ 
+        error: isPaused ? 'Supabase database is paused. Please visit the Supabase Dashboard to unpause it.' : error.message,
+        isPaused
+      }, { status: 500 });
     }
 
     return NextResponse.json({ book: data });
   } catch (err: any) {
     console.error('API /books PATCH error:', err);
-    return NextResponse.json({ error: err.message || 'Internal server error.' }, { status: 500 });
+    const isPaused = isSupabasePausedError(err);
+    return NextResponse.json(
+      { 
+        error: isPaused ? 'Supabase database is paused. Please visit the Supabase Dashboard to unpause it.' : (err.message || 'Internal server error.'),
+        isPaused
+      },
+      { status: 500 }
+    );
   }
 }

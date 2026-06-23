@@ -46,6 +46,8 @@ function displayStatus(status: string) {
 export default function LibraryPage() {
   const [books, setBooks] = useState<Book[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [isDbPaused, setIsDbPaused] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
@@ -66,10 +68,21 @@ export default function LibraryPage() {
 
   const loadBooks = async () => {
     setIsLoading(true);
-    const filterValue = statusFilter === "Not Read" ? "Not Read" : statusFilter;
-    const results = await searchBooks(searchQuery, filterValue);
-    setBooks(results);
-    setIsLoading(false);
+    setError(null);
+    setIsDbPaused(false);
+    try {
+      const filterValue = statusFilter === "Not Read" ? "Not Read" : statusFilter;
+      const results = await searchBooks(searchQuery, filterValue);
+      setBooks(results);
+    } catch (err: any) {
+      console.error("Error loading library books:", err);
+      setError(err.message || "Failed to load library books.");
+      if (err.isPaused) {
+        setIsDbPaused(true);
+      }
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -505,6 +518,50 @@ export default function LibraryPage() {
         <div className="flex flex-col items-center justify-center py-20 gap-4">
           <Loader2 className="w-10 h-10 text-amber-500 animate-spin" />
           <p className="text-white/50 animate-pulse">Browsing your library...</p>
+        </div>
+      ) : isDbPaused ? (
+        <div className="relative overflow-hidden rounded-3xl border border-amber-500/30 bg-gradient-to-br from-amber-500/10 via-red-500/5 to-transparent p-12 text-center shadow-2xl backdrop-blur-xl">
+          <div className="absolute -right-16 -top-16 w-48 h-48 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
+          <div className="w-16 h-16 bg-amber-500/20 border border-amber-500/40 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-amber-500/5">
+            <AlertTriangle className="w-8 h-8 text-amber-400" />
+          </div>
+          <h3 className="text-2xl font-outfit font-bold text-white mb-3">Database Connection Offline</h3>
+          <p className="text-white/70 max-w-lg mx-auto mb-8 leading-relaxed">
+            Your library database is hosted on the Supabase Free Tier, which automatically pauses projects after a period of inactivity. Don't worry! Your 106+ books are safe.
+          </p>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+            <a 
+              href="https://supabase.com/dashboard"
+              target="_blank"
+              rel="noreferrer"
+              className="px-8 py-3 bg-amber-500 hover:bg-amber-400 text-white rounded-xl font-bold transition-all shadow-lg shadow-amber-500/20 flex items-center gap-2"
+            >
+              <Sparkles className="w-5 h-5 animate-pulse" />
+              Unpause Database on Supabase
+            </a>
+            <button 
+              onClick={loadBooks}
+              className="px-8 py-3 bg-white/5 hover:bg-white/10 border border-white/10 text-white rounded-xl font-semibold transition-all"
+            >
+              Retry Connection
+            </button>
+          </div>
+        </div>
+      ) : error ? (
+        <div className="glass-card rounded-3xl p-12 text-center border border-red-500/20">
+          <div className="w-16 h-16 bg-red-500/10 rounded-2xl flex items-center justify-center mx-auto mb-6">
+            <AlertTriangle className="w-8 h-8 text-red-400" />
+          </div>
+          <h3 className="text-xl font-outfit font-bold text-white mb-2">Error Loading Books</h3>
+          <p className="text-white/50 max-w-sm mx-auto mb-6">
+            {error}
+          </p>
+          <button 
+            onClick={loadBooks}
+            className="px-6 py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 text-white rounded-xl font-medium transition-all"
+          >
+            Try Again
+          </button>
         </div>
       ) : books.length === 0 ? (
         <div className="glass-card rounded-3xl p-12 text-center">

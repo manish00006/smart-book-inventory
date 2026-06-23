@@ -18,6 +18,8 @@ import { getProfile, Profile } from "@/lib/profileService";
 
 export default function Dashboard() {
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [isDbPaused, setIsDbPaused] = useState(false);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [libraryStats, setLibraryStats] = useState({
     totalBooks: 0,
@@ -27,25 +29,33 @@ export default function Dashboard() {
   });
   const [recentBooks, setRecentBooks] = useState<Book[]>([]);
 
-  useEffect(() => {
-    async function loadData() {
-      setIsLoading(true);
-      try {
-        const [stats, books, prof] = await Promise.all([
-          getLibraryStats(),
-          getRecentBooks(4),
-          getProfile()
-        ]);
-        setLibraryStats(stats);
-        setRecentBooks(books);
-        setProfile(prof);
-      } catch (error) {
-        console.error("Failed to load dashboard data", error);
-      } finally {
-        setIsLoading(false);
-      }
-    }
+  async function loadData() {
+    setIsLoading(true);
+    setError(null);
+    setIsDbPaused(false);
+    try {
+      // Load profile first (it has local/mock fallback if needed)
+      const prof = await getProfile().catch(() => null);
+      if (prof) setProfile(prof);
 
+      const [stats, books] = await Promise.all([
+        getLibraryStats(),
+        getRecentBooks(4)
+      ]);
+      setLibraryStats(stats);
+      setRecentBooks(books);
+    } catch (err: any) {
+      console.error("Failed to load dashboard data:", err);
+      setError(err.message || "Failed to load dashboard data.");
+      if (err.isPaused) {
+        setIsDbPaused(true);
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  useEffect(() => {
     loadData();
   }, []);
 
@@ -80,6 +90,40 @@ export default function Dashboard() {
           View Full Analytics
         </button>
       </div>
+
+      {isDbPaused && (
+        <div className="relative overflow-hidden rounded-3xl border border-amber-500/30 bg-gradient-to-br from-amber-500/10 via-red-500/5 to-transparent p-6 shadow-2xl backdrop-blur-xl flex flex-col md:flex-row items-center justify-between gap-6">
+          <div className="absolute -right-16 -top-16 w-48 h-48 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-amber-500/20 border border-amber-500/40 rounded-2xl flex items-center justify-center flex-shrink-0">
+              <AlertTriangle className="w-6 h-6 text-amber-400" />
+            </div>
+            <div>
+              <h3 className="text-lg font-outfit font-bold text-white mb-1">Database Connection Offline</h3>
+              <p className="text-sm text-white/70 max-w-xl">
+                Your database is hosted on the Supabase Free Tier and has been paused due to inactivity. Click the button to unpause it.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3 w-full md:w-auto flex-shrink-0">
+            <a 
+              href="https://supabase.com/dashboard"
+              target="_blank"
+              rel="noreferrer"
+              className="flex-1 md:flex-initial px-6 py-2.5 bg-amber-500 hover:bg-amber-400 text-white rounded-xl font-bold transition-all shadow-lg shadow-amber-500/20 text-center text-sm flex items-center justify-center gap-2"
+            >
+              <Sparkles className="w-4 h-4 animate-pulse" />
+              Restore Database
+            </a>
+            <button 
+              onClick={loadData}
+              className="flex-1 md:flex-initial px-6 py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 text-white rounded-xl font-semibold transition-all text-sm"
+            >
+              Retry
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Goal Tracker Card */}

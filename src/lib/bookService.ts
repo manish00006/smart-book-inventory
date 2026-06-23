@@ -14,20 +14,35 @@ export type Book = {
 export type BookInsert = Omit<Book, 'id' | 'added_at'>;
 
 /**
+ * Helper to handle non-ok fetch responses and throw structured error
+ */
+async function handleFetchError(res: Response, defaultMsg: string) {
+  let errMsg = defaultMsg;
+  let isPaused = false;
+  try {
+    const json = await res.json();
+    errMsg = json.error || errMsg;
+    isPaused = json.isPaused || false;
+  } catch (_) {}
+  const error: any = new Error(errMsg);
+  error.isPaused = isPaused;
+  throw error;
+}
+
+/**
  * Fetch recently added books via server API
  */
 export async function getRecentBooks(limit = 10): Promise<Book[]> {
   try {
     const res = await fetch(`/api/books?limit=${limit}`);
     if (!res.ok) {
-      console.error('API error fetching recent books:', res.statusText);
-      return [];
+      await handleFetchError(res, 'Failed to fetch recent books');
     }
     const json = await res.json();
     return json.books || [];
   } catch (err) {
     console.error('Error fetching recent books:', err);
-    return [];
+    throw err;
   }
 }
 
@@ -38,7 +53,7 @@ export async function getLibraryStats() {
   try {
     const res = await fetch('/api/books?limit=500');
     if (!res.ok) {
-      return { totalBooks: 0, booksRead: 0, duplicateAlerts: 0, readingTimeHours: 0 };
+      await handleFetchError(res, 'Failed to fetch library stats');
     }
     const json = await res.json();
     const allBooks = json.books || [];
@@ -51,9 +66,10 @@ export async function getLibraryStats() {
     };
   } catch (err) {
     console.error('Error fetching stats:', err);
-    return { totalBooks: 0, booksRead: 0, duplicateAlerts: 0, readingTimeHours: 0 };
+    throw err;
   }
 }
+
 
 /**
  * Check if an ISBN already exists in the library
@@ -130,16 +146,16 @@ export async function searchBooks(query: string, statusFilter?: string): Promise
 
     const res = await fetch(`/api/books?${params.toString()}`);
     if (!res.ok) {
-      console.error('API error searching books:', res.statusText);
-      return [];
+      await handleFetchError(res, 'Failed to search books');
     }
     const json = await res.json();
     return json.books || [];
   } catch (err) {
     console.error('Error in searchBooks:', err);
-    return [];
+    throw err;
   }
 }
+
 
 /**
  * Update a book's metadata (e.g., status, shelf)
