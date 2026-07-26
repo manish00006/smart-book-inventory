@@ -15,11 +15,11 @@ import {
 } from "lucide-react";
 
 const navItems = [
-  { name: "Dashboard", href: "/", icon: LayoutDashboard },
+  { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { name: "My Library", href: "/library", icon: Library },
   { name: "Scan Book", href: "/scanner", icon: ScanBarcode },
   { name: "Wishlist", href: "/wishlist", icon: Heart },
-  { name: "Search", href: "/search", icon: Search },
+  { name: "Search", href: "/library", icon: Search },
 ];
 
 export default function Sidebar() {
@@ -32,14 +32,14 @@ export default function Sidebar() {
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
-      <div className="flex items-center gap-3 p-6 mt-2">
-        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center shadow-[0_0_15px_rgba(245,158,11,0.5)]">
+      <Link href="/" className="flex items-center gap-3 p-6 mt-2 hover:opacity-80 transition-opacity">
+        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center shadow-[0_0_15px_rgba(245,158,11,0.5)] flex-shrink-0">
           <BookOpen className="w-6 h-6 text-white" />
         </div>
         <h1 className={`font-outfit font-bold text-xl tracking-wide text-transparent bg-clip-text bg-gradient-to-r from-white to-white/70 transition-opacity duration-300 ${isHovered ? 'md:opacity-100' : 'md:opacity-100 hidden md:block'}`}>
           BookMind
         </h1>
-      </div>
+      </Link>
 
       <nav className="flex-1 px-4 py-8 space-y-2">
         {navItems.map((item) => {

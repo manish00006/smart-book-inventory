@@ -48,6 +48,7 @@ export default function LibraryPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isDbPaused, setIsDbPaused] = useState(false);
+  const [hideOfflineBanner, setHideOfflineBanner] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
@@ -86,6 +87,11 @@ export default function LibraryPage() {
   };
 
   useEffect(() => {
+    try {
+      if (localStorage.getItem('hide_offline_banner') === 'true') {
+        setHideOfflineBanner(true);
+      }
+    } catch {}
     const timer = setTimeout(() => {
       loadBooks();
     }, 300);
@@ -513,41 +519,51 @@ export default function LibraryPage() {
         ))}
       </div>
 
+      {/* Offline / Free Tier Banner */}
+      {isDbPaused && !hideOfflineBanner && (
+        <div className="relative overflow-hidden rounded-3xl border border-emerald-500/30 bg-gradient-to-br from-emerald-500/10 via-blue-500/5 to-transparent p-6 sm:p-8 text-center shadow-2xl backdrop-blur-xl mb-6">
+          <div className="absolute -right-16 -top-16 w-48 h-48 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
+          <div className="flex flex-col md:flex-row items-center justify-between gap-6 relative z-10">
+            <div className="flex items-center gap-4 text-left">
+              <div className="w-12 h-12 bg-emerald-500/20 border border-emerald-500/40 rounded-2xl flex items-center justify-center flex-shrink-0 shadow-lg shadow-emerald-500/5">
+                <Sparkles className="w-6 h-6 text-emerald-400" />
+              </div>
+              <div>
+                <h3 className="text-lg font-outfit font-bold text-white mb-1">⚡ Local Library Mode Active</h3>
+                <p className="text-white/70 text-sm max-w-xl leading-relaxed">
+                  Your library database is retrieved and running fast in your browser! All your books, reading statistics, and edits are automatically saved locally.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3 w-full md:w-auto flex-shrink-0">
+              <button 
+                onClick={loadBooks}
+                className="flex-1 md:flex-initial px-6 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-white rounded-xl font-bold transition-all shadow-lg shadow-emerald-500/20 text-center text-sm flex items-center justify-center gap-2"
+              >
+                Refresh Library
+              </button>
+              <button
+                onClick={() => {
+                  setHideOfflineBanner(true);
+                  try { localStorage.setItem('hide_offline_banner', 'true'); } catch {}
+                }}
+                title="Dismiss banner"
+                className="p-2.5 bg-white/5 hover:bg-white/15 border border-white/10 text-white/70 hover:text-white rounded-xl transition-all"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Results */}
       {isLoading ? (
         <div className="flex flex-col items-center justify-center py-20 gap-4">
           <Loader2 className="w-10 h-10 text-amber-500 animate-spin" />
           <p className="text-white/50 animate-pulse">Browsing your library...</p>
         </div>
-      ) : isDbPaused ? (
-        <div className="relative overflow-hidden rounded-3xl border border-amber-500/30 bg-gradient-to-br from-amber-500/10 via-red-500/5 to-transparent p-12 text-center shadow-2xl backdrop-blur-xl">
-          <div className="absolute -right-16 -top-16 w-48 h-48 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
-          <div className="w-16 h-16 bg-amber-500/20 border border-amber-500/40 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-amber-500/5">
-            <AlertTriangle className="w-8 h-8 text-amber-400" />
-          </div>
-          <h3 className="text-2xl font-outfit font-bold text-white mb-3">Database Connection Offline</h3>
-          <p className="text-white/70 max-w-lg mx-auto mb-8 leading-relaxed">
-            Your library database is hosted on the Supabase Free Tier, which automatically pauses projects after a period of inactivity. Don't worry! Your 106+ books are safe.
-          </p>
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <a 
-              href="https://supabase.com/dashboard"
-              target="_blank"
-              rel="noreferrer"
-              className="px-8 py-3 bg-amber-500 hover:bg-amber-400 text-white rounded-xl font-bold transition-all shadow-lg shadow-amber-500/20 flex items-center gap-2"
-            >
-              <Sparkles className="w-5 h-5 animate-pulse" />
-              Unpause Database on Supabase
-            </a>
-            <button 
-              onClick={loadBooks}
-              className="px-8 py-3 bg-white/5 hover:bg-white/10 border border-white/10 text-white rounded-xl font-semibold transition-all"
-            >
-              Retry Connection
-            </button>
-          </div>
-        </div>
-      ) : error ? (
+      ) : error && books.length === 0 ? (
         <div className="glass-card rounded-3xl p-12 text-center border border-red-500/20">
           <div className="w-16 h-16 bg-red-500/10 rounded-2xl flex items-center justify-center mx-auto mb-6">
             <AlertTriangle className="w-8 h-8 text-red-400" />
